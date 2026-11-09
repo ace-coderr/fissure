@@ -33,14 +33,14 @@ impl Deploy for Original {
 pub const INITIAL_SUPPLY: u256 = 1000
 
 // Menu entry indices, in the order of `Erc20Calls`.
-const TRANSFER: u256 = 0
-const APPROVE: u256 = 1
-const TRANSFER_FROM: u256 = 2
-const MINT: u256 = 3
-const BURN: u256 = 4
-const BURN_FROM: u256 = 5
-const INCREASE: u256 = 6
-const DECREASE: u256 = 7
+pub const TRANSFER: u256 = 0
+pub const APPROVE: u256 = 1
+pub const TRANSFER_FROM: u256 = 2
+pub const MINT: u256 = 3
+pub const BURN: u256 = 4
+pub const BURN_FROM: u256 = 5
+pub const INCREASE: u256 = 6
+pub const DECREASE: u256 = 7
 
 /// Invariant ids reported by `check` / `check_step`.
 pub const INV_CONSERVATION: u256 = 1

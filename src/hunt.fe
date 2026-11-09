@@ -5,8 +5,9 @@ use core::ptr::MemVec
 use ingot::menu::Step
 use ingot::prng::Prng
 use ingot::menu::Menu
-use ingot::runner::{Config, Harness, fuzz, zeros}
-use ingot::shrink::{Shrunk, shrink}
+use ingot::cast::Cast
+use ingot::runner::{Config, Harness, fuzz_cast, zeros}
+use ingot::shrink::{Shrunk, shrink_cast}
 use std::abi::dyn_array::DynArray
 use std::evm::effects::revert_error
 
@@ -50,10 +51,12 @@ pub struct ShrunkStep {
     pub w0: u256,
     pub w1: u256,
     pub w2: u256,
+    /// Which sender made the call: 0 the test account, `1..` the relays.
+    pub who: u256,
 }
 
-/// Revert data of a failed `check`. `steps` is the shrunk sequence, five words
-/// per call: variant, value, w0, w1, w2.
+/// Revert data of a failed `check`. `steps` is the shrunk sequence, six words
+/// per call: variant, value, w0, w1, w2, who.
 #[error]
 pub struct Failure {
     pub seed: u256,
@@ -74,13 +77,20 @@ pub struct Unreached { pub entry: u256 }
 /// Run up to `runs` fuzz runs, with seeds derived from `cfg.seed`. The first
 /// run that breaks an invariant is shrunk.
 pub fn hunt<H: Harness>(_ cfg: Config, _ runs: u256) -> Hunt uses (evm: mut Evm) {
+    hunt_cast<H>(cfg, runs, Cast::none())
+}
+
+/// `hunt` with several senders (see `Cast::deploy`).
+pub fn hunt_cast<H: Harness>(_ cfg: Config, _ runs: u256, _ cast: Cast) -> Hunt
+uses (evm: mut Evm)
+{
     var accepted: u256 = 0
     var executed: u256 = 0
     var ok_by = zeros(H::Calls::LEN)
     var r: u256 = 0
     while r < runs {
         let seed = Prng::derive(cfg.seed, r)
-        let run = fuzz<H>(Config { seed, steps: cfg.steps, gas: cfg.gas }, r)
+        let run = fuzz_cast<H>(Config { seed, steps: cfg.steps, gas: cfg.gas }, r, cast)
         accepted = accepted + run.accepted
         executed = executed + run.executed
         var e: usize = 0
@@ -90,7 +100,7 @@ pub fn hunt<H: Harness>(_ cfg: Config, _ runs: u256) -> Hunt uses (evm: mut Evm)
         }
         if run.broken != 0 {
             let original_len = run.steps.len() as u256
-            let shrunk = shrink<H>(run, cfg.gas)
+            let shrunk = shrink_cast<H>(run, cfg.gas, cast)
             return Hunt {
                 found: true,
                 seed,
@@ -139,6 +149,7 @@ pub fn emit_hunt<H: Harness>(_ h: Hunt) uses (evm: mut Evm) {
                 w0: s.w0,
                 w1: s.w1,
                 w2: s.w2,
+                who: s.who,
             },
         )
         i = i + 1
@@ -155,6 +166,7 @@ fn flatten(_ steps: MemVec<Step>) -> DynArray<u256> {
         words.push(s.w0)
         words.push(s.w1)
         words.push(s.w2)
+        words.push(s.who)
         i = i + 1
     }
     DynArray<u256>::from_slice(words.as_slice())
@@ -164,7 +176,14 @@ fn flatten(_ steps: MemVec<Step>) -> DynArray<u256> {
 /// shrunk sequence). Reverts with `Vacuous` if nothing was ever accepted.
 /// Returns the number of accepted calls on success.
 pub fn check<H: Harness>(_ cfg: Config, _ runs: u256) -> u256 uses (evm: mut Evm) {
-    let h = hunt<H>(cfg, runs)
+    check_cast<H>(cfg, runs, Cast::none())
+}
+
+/// `check` with several senders (see `Cast::deploy`).
+pub fn check_cast<H: Harness>(_ cfg: Config, _ runs: u256, _ cast: Cast) -> u256
+uses (evm: mut Evm)
+{
+    let h = hunt_cast<H>(cfg, runs, cast)
     if h.found {
         revert_error(
             Failure {

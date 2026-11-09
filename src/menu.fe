@@ -12,11 +12,20 @@ use std::abi::sol::Sol
 use std::evm::wei
 use ingot::gen::{Env, Generator, SmallWord, Zero}
 use ingot::prng::Draw
+use ingot::relay::RelayMsg
 
-/// One concrete call: which menu entry, the native value sent, and up to three
-/// argument words. A step is plain data, so it can be printed, replayed and
+/// One concrete call: which menu entry, the native value sent, up to three
+/// argument words, and who sends it (`who`: 0 is the test account, `1..` the
+/// relays of a cast). A step is plain data, so it can be printed, replayed and
 /// shrunk without knowing any message type.
-pub struct Step { pub variant: u256, pub value: u256, pub w0: u256, pub w1: u256, pub w2: u256 }
+pub struct Step {
+    pub variant: u256,
+    pub value: u256,
+    pub w0: u256,
+    pub w1: u256,
+    pub w2: u256,
+    pub who: u256,
+}
 
 impl Copy for Step {}
 
@@ -38,7 +47,9 @@ pub trait Entry {
     fn selector() -> u256
     /// Shrinking: a simpler word for `slot` (0 value, 1..=3 argument words).
     fn simpler(_ env: Env, _ slot: u256, _ v: u256, _ attempt: u256) -> u256
-    fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
+    /// Make the call. `via` is the relay that sends it (0: the test account
+    /// calls the target directly).
+    fn fire(_ target: Address, _ gas: u256, _ step: Step, _ via: u256) -> bool
     uses (evm: mut Evm)
 }
 
@@ -51,7 +62,7 @@ where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Genera
         let w0 = A0::generate(env, mut rng)
         let w1 = A1::generate(env, mut rng)
         let w2 = A2::generate(env, mut rng)
-        Step { variant: 0, value, w0, w1, w2 }
+        Step { variant: 0, value, w0, w1, w2, who: 0 }
     }
 
     fn selector() -> u256 {
@@ -71,12 +82,41 @@ where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Genera
         A2::simpler(env, v, attempt)
     }
 
-    fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
+    fn fire(_ target: Address, _ gas: u256, _ step: Step, _ via: u256) -> bool
     uses (evm: mut Evm)
     {
         let size = <M as AbiSize>::HEAD_SIZE as usize
-        var buf = MemBuffer::alloc(36 + size)
         let sel = <M as MsgVariant<Sol>>::SELECTOR
+        if via != 0 {
+            // Through a relay: the target sees the relay as the sender. Words
+            // beyond the message's static size are not sent, as in a direct call.
+            var w0: u256 = 0
+            var w1: u256 = 0
+            var w2: u256 = 0
+            if size >= 32 { w0 = step.w0 }
+            if size >= 64 { w1 = step.w1 }
+            if size >= 96 { w2 = step.w2 }
+            let out = evm
+                .try_call(
+                    addr: Address::from_word_truncate(via),
+                    gas: gas + 100000,
+                    value: wei(step.value),
+                    message: RelayMsg::Relay {
+                        target,
+                        selector: sel as u256,
+                        size: size as u256,
+                        w0,
+                        w1,
+                        w2,
+                        gas,
+                    },
+                )
+            if !out.success() || out.returndata_len() < 32 {
+                return false
+            }
+            return out.returndata().read_word(0) != 0
+        }
+        var buf = MemBuffer::alloc(36 + size)
         buf.write_word(offset: 0, value: (sel as u256) << 224)
         if size >= 32 {
             buf.write_word(offset: 4, value: step.w0)
@@ -108,7 +148,7 @@ pub trait Menu {
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step
     fn selector_at(_ i: u256) -> u256
     fn simpler_at(_ i: u256, _ env: Env, _ slot: u256, _ v: u256, _ attempt: u256) -> u256
-    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
+    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step, _ via: u256) -> bool
     uses (evm: mut Evm)
 }
 
@@ -117,7 +157,7 @@ impl Menu for Nil {
     const MAX_VALUE: u256 = 0
 
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step {
-        Step { variant: 0, value: 0, w0: 0, w1: 0, w2: 0 }
+        Step { variant: 0, value: 0, w0: 0, w1: 0, w2: 0, who: 0 }
     }
 
     fn selector_at(_ i: u256) -> u256 {
@@ -128,7 +168,7 @@ impl Menu for Nil {
         v
     }
 
-    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
+    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step, _ via: u256) -> bool
     uses (evm: mut Evm)
     {
         false
@@ -168,12 +208,12 @@ impl<H, T> Menu for Cons<H, T> where H: Entry, T: Menu {
         T::simpler_at(i - 1, env, slot, v, attempt)
     }
 
-    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
+    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step, _ via: u256) -> bool
     uses (evm: mut Evm)
     {
         if i == 0 {
-            return H::fire(target, gas, step)
+            return H::fire(target, gas, step, via)
         }
-        T::fire_at(i - 1, target, gas, step)
+        T::fire_at(i - 1, target, gas, step, via)
     }
 }

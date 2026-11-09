@@ -1,0 +1,44 @@
+//! A relay: a stateless contract that makes a call on someone's behalf, so the
+//! target sees the relay as `msg.sender`. Several relays are several senders.
+//!
+//! It forwards `selector ++ the first `size` bytes of three argument words` to
+//! `target` with the ether it was sent, and returns whether the target accepted
+//! the call (an inner revert is caught here and reported, not propagated).
+
+use core::ptr::MemBuffer
+
+pub msg RelayMsg {
+    #[selector = sol(
+        "relay(address,uint256,uint256,uint256,uint256,uint256,uint256)",
+    )]
+    Relay {
+        target: Address,
+        selector: u256,
+        size: u256,
+        w0: u256,
+        w1: u256,
+        w2: u256,
+        gas: u256,
+    } -> bool,
+}
+
+pub contract Relay uses (ctx: Ctx, call: mut Call) {
+    recv RelayMsg {
+        #[payable]
+        Relay { target, selector, size, w0, w1, w2, gas } -> bool
+        uses (ctx, mut call)
+        {
+            // Calldata is 4 selector bytes plus `size` bytes of arguments, as a
+            // direct call would send; `size` is at most three words.
+            var len = size
+            if len > 96 { len = 96 }
+            var buf = MemBuffer::alloc(100 + 32)
+            buf.write_word(offset: 0, value: selector << 224)
+            buf.write_word(offset: 4, value: w0)
+            buf.write_word(offset: 36, value: w1)
+            buf.write_word(offset: 68, value: w2)
+            buf.truncate(4 + len as usize)
+            call.try_call_raw(addr: target, gas, value: ctx.value(), args: buf.span()).success()
+        }
+    }
+}

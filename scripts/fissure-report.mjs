@@ -76,8 +76,9 @@ const h = (n) => "0x" + n.toString(16);
 
 const EVENTS = {
   [keccak256("Found(uint256,uint256,uint256,uint256,uint256)")]: "Found",
-  [keccak256("ShrunkStep(uint256,uint256,uint256,uint256,uint256,uint256,uint256)")]: "ShrunkStep",
+  [keccak256("ShrunkStep(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)")]: "ShrunkStep",
   [keccak256("MutantResult(uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256)")]: "MutantResult",
+  [keccak256("MultiMutantResult(uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256)")]: "MultiMutantResult",
 };
 const ERRORS = {
   [keccak256("Failure(uint256,uint256,uint256,uint256[])").slice(0, 8)]: "Failure",
@@ -113,7 +114,8 @@ function printSequence(seed, invariant, originalLen, steps, extra = "") {
     const args = [s.w0, s.w1, s.w2].map((w) => w.toString()).join(", ");
     const value = s.value === 0n ? "" : `  value=${s.value} wei`;
     const label = s.selector === undefined ? `menu entry ${s.variant}` : nameOf(s.selector);
-    console.log(`    ${i + 1}. ${label}${value}   words=[${args}]`);
+    const by = s.who === undefined || s.who === 0n ? "" : `   [sender: relay ${s.who}]`;
+    console.log(`    ${i + 1}. ${label}${value}   words=[${args}]${by}`);
   });
   console.log(`  reproduce: fuzz with Config { seed: ${seed}, .. } or replay the calls above`);
 }
@@ -123,6 +125,7 @@ const text = readFileSync(0, "utf8").replace(/^﻿/, "");
 let test = null;
 const found = {};
 const mutants = [];
+const multi = [];
 let any = false;
 for (const line of text.split(/\r?\n/)) {
   const t = line.match(/^\s*(PASS|FAIL)\s+\[[^\]]+\]\s+(\S+)/);
@@ -134,12 +137,14 @@ for (const line of text.split(/\r?\n/)) {
   if (log && test) {
     const name = EVENTS[log[1].slice(2)];
     const w = words(log[2]);
-    if (name === "MutantResult") {
+    if (name === "MultiMutantResult") {
+      multi.push({ test, id: w[0], found: w[1] === 1n, seed: w[2], invariant: w[3], originalLen: w[4], shrunkLen: w[5], attempts: w[6], accepted: w[7] });
+    } else if (name === "MutantResult") {
       mutants.push({ test, id: w[0], found: w[1] === 1n, seed: w[2], invariant: w[3], originalLen: w[4], shrunkLen: w[5], attempts: w[6], accepted: w[7] });
     } else if (name === "Found") {
       found[test] = { seed: w[0], invariant: w[1], originalLen: w[2], shrunkLen: w[3], attempts: w[4], steps: [] };
     } else if (name === "ShrunkStep" && found[test]) {
-      found[test].steps.push({ variant: w[1], selector: w[2], value: w[3], w0: w[4], w1: w[5], w2: w[6] });
+      found[test].steps.push({ variant: w[1], selector: w[2], value: w[3], w0: w[4], w1: w[5], w2: w[6], who: w[7] });
     }
     continue;
   }
@@ -152,9 +157,9 @@ for (const line of text.split(/\r?\n/)) {
       const w = words(body); // seed, invariant, original_len, offset, len, steps...
       const len = Number(w[4]);
       const steps = [];
-      for (let i = 0; i < len / 5; i++) {
-        const [variant, value, w0, w1, w2] = w.slice(5 + i * 5, 10 + i * 5);
-        steps.push({ variant, value, w0, w1, w2 });
+      for (let i = 0; i < len / 6; i++) {
+        const [variant, value, w0, w1, w2, who] = w.slice(5 + i * 6, 11 + i * 6);
+        steps.push({ variant, value, w0, w1, w2, who });
       }
       any = true;
       console.log(`\n${test}: FISSURE FOUND A FAILURE`);
@@ -190,17 +195,19 @@ for (const [name, f] of Object.entries(found)) {
   console.log(`\n${name}: FISSURE FOUND A FAILURE`);
   printSequence(f.seed, f.invariant, f.originalLen, f.steps, ` in ${f.attempts} replays`);
 }
-if (mutants.length > 0) {
+function printTable(title, rows) {
   any = true;
   console.log("");
-  console.log("MUTATION RESULTS");
-  console.log("  mutant  verdict  invariant  seed (decimal, truncated)  calls->shrunk  replays  accepted calls");
-  for (const m of mutants.sort((a, b) => Number(a.id - b.id))) {
-    const seed = m.found ? m.seed.toString().slice(0, 12) + "..." : "-";
+  console.log(title);
+  console.log("  mutant  verdict  invariant  calls->shrunk  replays  accepted calls");
+  for (const m of rows.sort((a, b) => Number(a.id - b.id))) {
     const lens = m.found ? `${m.originalLen}->${m.shrunkLen}` : "-";
-    console.log(`  ${String(m.id).padStart(6)}  ${(m.found ? "CAUGHT" : m.id === 0n ? "clean" : "missed").padEnd(7)}  ${String(m.found ? m.invariant : "-").padStart(9)}  ${seed.padEnd(26)}  ${lens.padEnd(13)}  ${String(m.found ? m.attempts : "-").padStart(7)}  ${m.accepted}`);
+    const verdict = m.found ? "CAUGHT" : m.id === 0n ? "clean" : "missed";
+    console.log(`  ${String(m.id).padStart(6)}  ${verdict.padEnd(7)}  ${String(m.found ? m.invariant : "-").padStart(9)}  ${lens.padEnd(13)}  ${String(m.found ? m.attempts : "-").padStart(7)}  ${m.accepted}`);
   }
 }
+if (mutants.length > 0) printTable("MUTATION RESULTS (single sender)", mutants);
+if (multi.length > 0) printTable("MUTATION RESULTS (test account + 2 relay senders)", multi);
 if (!any) {
   console.log("No Fissure failures in this output.");
   if (expectFound) process.exit(1);

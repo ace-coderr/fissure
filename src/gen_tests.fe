@@ -12,10 +12,11 @@ use ingot::gen::{
     UpTo,
     Zero,
 }
+use ingot::cast::Cast
 use ingot::prng::{Prng, WORD_MAX}
 
 fn env() -> Env {
-    Env { target_balance: 1000, sender: 0x77 }
+    Env { target_balance: 1000, sender: 0x77, root: 0x77, cast: Cast::none() }
 }
 
 #[test]
@@ -80,8 +81,14 @@ fn amount_handles_empty_and_full_balance() {
     var p = Prng::seeded(4)
     var i: u256 = 0
     while i < 100 {
-        let _ = Amount::generate(Env { target_balance: 0, sender: 0x77 }, mut p)
-        let _ = Amount::generate(Env { target_balance: WORD_MAX, sender: 0x77 }, mut p)
+        let _ = Amount::generate(
+            Env { target_balance: 0, sender: 0x77, root: 0x77, cast: Cast::none() },
+            mut p,
+        )
+        let _ = Amount::generate(
+            Env { target_balance: WORD_MAX, sender: 0x77, root: 0x77, cast: Cast::none() },
+            mut p,
+        )
         i = i + 1
     }
 }
@@ -113,8 +120,14 @@ fn pay_ignores_the_world() {
     var i: u256 = 0
     while i < 50 {
         assert!(
-            Pay::generate(Env { target_balance: 0, sender: 0x77 }, mut a)
-                == Pay::generate(Env { target_balance: 12345, sender: 0x77 }, mut b),
+            Pay::generate(
+                    Env { target_balance: 0, sender: 0x77, root: 0x77, cast: Cast::none() },
+                    mut a,
+                )
+                == Pay::generate(
+                    Env { target_balance: 12345, sender: 0x77, root: 0x77, cast: Cast::none() },
+                    mut b,
+                ),
         )
         i = i + 1
     }

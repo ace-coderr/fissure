@@ -1,0 +1,70 @@
+//! The cast: the extra senders of a multi-sender run.
+//!
+//! Without a cast every call comes from the test account. With a cast of `n`
+//! relays (`Cast::deploy(n)`), each call is made by one of `n + 1` senders: the
+//! test account, or one of the relays. Relays are stateless, so one cast serves
+//! every run and shrink replay of a hunt; its addresses are fixed for its life.
+
+use std::evm::effects::revert_error
+use ingot::relay::Relay
+
+/// The most relays a cast holds.
+pub const MAX_RELAYS: u256 = 3
+
+#[error]
+pub struct TooManyRelays { pub asked: u256, pub max: u256 }
+
+/// Up to three relay addresses, as ABI words. A plain `Copy` value so
+/// generators can see it.
+pub struct Cast { pub count: u256, pub r0: u256, pub r1: u256, pub r2: u256 }
+
+impl Copy for Cast {}
+
+impl Cast {
+    /// No relays: every call comes from the test account.
+    pub fn none() -> Self {
+        Cast { count: 0, r0: 0, r1: 0, r2: 0 }
+    }
+
+    /// Deploy `n` relays (at most `MAX_RELAYS`).
+    pub fn deploy(_ n: u256) -> Self uses (evm: mut Evm) {
+        if n > MAX_RELAYS {
+            revert_error(TooManyRelays { asked: n, max: MAX_RELAYS })
+        }
+        var c = Cast { count: n, r0: 0, r1: 0, r2: 0 }
+        if n > 0 {
+            c.r0 = evm.create<Relay>(value: Wei::zero(), args: ()).word()
+        }
+        if n > 1 {
+            c.r1 = evm.create<Relay>(value: Wei::zero(), args: ()).word()
+        }
+        if n > 2 {
+            c.r2 = evm.create<Relay>(value: Wei::zero(), args: ()).word()
+        }
+        c
+    }
+
+    /// Address word of relay `i` (0-based), or 0 if there is none.
+    pub fn relay(self, _ i: u256) -> u256 {
+        if i >= self.count {
+            return 0
+        }
+        if i == 0 { return self.r0 }
+        if i == 1 { return self.r1 }
+        self.r2
+    }
+
+    /// The account that makes calls for sender number `who`: 0 is the test
+    /// account (`root`), `1..=count` are the relays.
+    pub fn account(self, _ who: u256, _ root: u256) -> u256 {
+        if who == 0 { return root }
+        self.relay(who - 1)
+    }
+
+    /// Whether `word` is one of the relays.
+    pub fn contains(self, _ word: u256) -> bool {
+        self.count > 0 && word == self.r0
+            || self.count > 1 && word == self.r1
+            || self.count > 2 && word == self.r2
+    }
+}

@@ -1,0 +1,464 @@
+//! Multi-sender harness for the CoolCoin ERC-20: the same menu as `harness.fe`,
+//! but calls are made by the test account OR by relay contracts (a `Cast`), so
+//! the token sees several different `msg.sender`s.
+//!
+//! Known accounts, by position: `0..=count` are the senders (the test account,
+//! then the relays); `count + 1` is the zero address; then four actors. The test
+//! account owns the initial supply and holds the minter role.
+//!
+//! Snapshot layout, with `n = count + 6` accounts and `count + 1` senders:
+//!   [0]                       total supply
+//!   [1 + a]                   balance of account a
+//!   [1 + n + o * (count + 1) + s]
+//!                             allowance that sender o granted to sender s
+//!
+//! Only allowances between senders are tracked: a spender that never sends
+//! (the zero address, an actor) cannot spend one, so they cost view calls and
+//! buy little. Approvals naming such spenders are not checked.
+
+use core::ptr::MemVec
+use ingot::cast::Cast
+use ingot::gen::{Env, Generator, Holder, Zero}
+use ingot::menu::{Call, Call1, Call2, Cons, Nil, Step}
+use ingot::prng::{Draw, WORD_MAX}
+use ingot::runner::Harness
+use super::{Erc20, Erc20Extended}
+use super::harness::{
+    APPROVE,
+    BURN,
+    BURN_FROM,
+    DECREASE,
+    Deploy,
+    INCREASE,
+    INV_ALLOWANCE_NOT_SPENT,
+    INV_ALLOWANCE_WRONG,
+    INV_BALANCES_MOVE_EXACTLY,
+    INV_BURN_WRONG,
+    INV_CONSERVATION,
+    INV_FAILED_CALL_CHANGES_STATE,
+    INV_MINT_WRONG,
+    INV_SUPPLY_CHANGED_WITHOUT_MINT_BURN,
+    INV_ZERO_ADDRESS_EMPTY,
+    MINT,
+    TRANSFER,
+    TRANSFER_FROM,
+}
+
+/// Anyone but the minter (the test account) managed to mint.
+pub const INV_MINT_WITHOUT_ROLE: u256 = 10
+
+/// An account a call names, tuned for several senders: the acting sender, any
+/// member of the cast (the test account and the relays), an actor, or zero.
+/// Concentrating on the cast makes "A acts on B's behalf" common.
+pub struct Party {}
+
+impl Generator for Party {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        let pick = rng.below(16)
+        if pick == 0 { return 0 }
+        if pick <= 5 {
+            return env.sender
+        }
+        if pick <= 13 {
+            return env.cast.account(rng.below(env.cast.count + 1), env.root)
+        }
+        0x1000 + rng.below(4)
+    }
+
+    fn simpler(_ env: Env, _ v: u256, _ attempt: u256) -> u256 {
+        Holder::simpler(env, v, attempt)
+    }
+}
+
+/// A token amount: mostly small repeated values (1, 2, 3), so that an approval
+/// and a later spend can match exactly, plus the boundaries around the acting
+/// sender's balance.
+pub struct Tok {}
+
+impl Generator for Tok {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        let bal = env.target_balance
+        let pick = rng.below(12)
+        if pick <= 2 {
+            return pick + 1
+        }
+        if pick == 3 { return 0 }
+        if pick == 4 { return bal }
+        if pick == 5 {
+            if bal == 0 { return 1 }
+            return bal - 1
+        }
+        if pick == 6 {
+            if bal == WORD_MAX {
+                return bal
+            }
+            return bal + 1
+        }
+        if pick == 7 {
+            return rng.between(0, bal)
+        }
+        if pick == 8 {
+            return WORD_MAX
+        }
+        pick - 7
+    }
+}
+
+/// The ERC-20 menu for several senders (same entries and order as `Erc20Calls`).
+pub type MultiCalls = Cons<
+    Call2<Erc20::Transfer, Zero, Party, Tok>,
+    Cons<
+        Call2<Erc20::Approve, Zero, Party, Tok>,
+        Cons<
+            Call<Erc20::TransferFrom, Zero, Party, Party, Tok>,
+            Cons<
+                Call2<Erc20Extended::Mint, Zero, Party, Tok>,
+                Cons<
+                    Call1<Erc20Extended::Burn, Zero, Tok>,
+                    Cons<
+                        Call2<Erc20Extended::BurnFrom, Zero, Party, Tok>,
+                        Cons<
+                            Call2<Erc20Extended::IncreaseAllowance, Zero, Party, Tok>,
+                            Cons<Call2<Erc20Extended::DecreaseAllowance, Zero, Party, Tok>, Nil>,
+                        >,
+                    >,
+                >,
+            >,
+        >,
+    >,
+>
+
+pub struct Erc20MultiSuite<D> {}
+
+fn balance_of(_ token: Address, _ who: u256) -> u256 uses (evm: mut Evm) {
+    evm.call(
+        addr: token,
+        gas: 100000,
+        value: Wei::zero(),
+        message: Erc20::BalanceOf { account: Address::from_word_truncate(who) },
+    )
+}
+
+fn allowance_of(_ token: Address, _ owner: u256, _ spender: u256) -> u256
+uses (evm: mut Evm)
+{
+    evm.call(
+        addr: token,
+        gas: 100000,
+        value: Wei::zero(),
+        message: Erc20::Allowance {
+            owner: Address::from_word_truncate(owner),
+            spender: Address::from_word_truncate(spender),
+        },
+    )
+}
+
+fn total_supply(_ token: Address) -> u256 uses (evm: mut Evm) {
+    evm.call(
+        addr: token,
+        gas: 100000,
+        value: Wei::zero(),
+        message: Erc20::TotalSupply {},
+    )
+}
+
+fn accounts(_ cast: Cast) -> u256 {
+    cast.count + 6
+}
+
+/// The address word of the account at position `i`.
+fn account(_ i: u256, _ cast: Cast) -> u256 uses (evm: Evm) {
+    if i <= cast.count {
+        return cast.account(i, evm.address().word())
+    }
+    if i == cast.count + 1 {
+        return 0
+    }
+    0x1000 + (i - cast.count - 2)
+}
+
+/// Position of `word` among the known accounts, or 99 if it is none of them.
+fn position(_ word: u256, _ cast: Cast) -> u256 uses (evm: Evm) {
+    var i: u256 = 0
+    while i < accounts(cast) {
+        if account(i, cast) == word {
+            return i
+        }
+        i = i + 1
+    }
+    99
+}
+
+fn bal_at(_ s: MemVec<u256>, _ a: u256) -> u256 {
+    s[(1 + a) as usize]
+}
+
+fn allow_at(_ s: MemVec<u256>, _ cast: Cast, _ owner: u256, _ spender: u256) -> u256 {
+    let n = accounts(cast)
+    s[(1 + n + owner * (cast.count + 1) + spender) as usize]
+}
+
+fn rose_by(_ after: u256, _ before: u256, _ amount: u256) -> bool {
+    after >= before && after - before == amount
+}
+
+fn fell_by(_ after: u256, _ before: u256, _ amount: u256) -> bool {
+    before >= after && before - after == amount
+}
+
+fn same_words(_ a: MemVec<u256>, _ b: MemVec<u256>) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    var i: usize = 0
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}
+
+fn moved_exactly(
+    _ before: MemVec<u256>,
+    _ after: MemVec<u256>,
+    _ cast: Cast,
+    _ from_pos: u256,
+    _ to_pos: u256,
+    _ amount: u256,
+) -> bool {
+    let n = accounts(cast)
+    if from_pos >= n || to_pos >= n {
+        return false
+    }
+    if from_pos == to_pos {
+        return bal_at(after, from_pos) == bal_at(before, from_pos)
+    }
+    fell_by(bal_at(after, from_pos), bal_at(before, from_pos), amount)
+        && rose_by(bal_at(after, to_pos), bal_at(before, to_pos), amount)
+}
+
+/// Conservation and the empty zero address, on a snapshot.
+fn state_invariants(_ s: MemVec<u256>, _ cast: Cast) -> u256 {
+    let n = accounts(cast)
+    var sum: u256 = 0
+    var a: u256 = 0
+    while a < n {
+        if bal_at(s, a) > WORD_MAX - sum {
+            return INV_CONSERVATION
+        }
+        sum = sum + bal_at(s, a)
+        a = a + 1
+    }
+    if sum != s[0] {
+        return INV_CONSERVATION
+    }
+    if bal_at(s, cast.count + 1) != 0 {
+        return INV_ZERO_ADDRESS_EMPTY
+    }
+    0
+}
+
+fn snapshot_of(_ token: Address, _ cast: Cast) -> MemVec<u256>
+uses (evm: mut Evm)
+{
+    let n = accounts(cast)
+    var s = MemVec<u256>::with_capacity((1 + n + (cast.count + 1) * (cast.count + 1)) as usize)
+    s.push(total_supply(token))
+    var a: u256 = 0
+    while a < n {
+        s.push(balance_of(token, account(a, cast)))
+        a = a + 1
+    }
+    var o: u256 = 0
+    while o <= cast.count {
+        var sp: u256 = 0
+        while sp <= cast.count {
+            s.push(allowance_of(token, account(o, cast), account(sp, cast)))
+            sp = sp + 1
+        }
+        o = o + 1
+    }
+    s
+}
+
+impl<D> Harness for Erc20MultiSuite<D> where D: Deploy {
+    type Calls = MultiCalls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        D::deploy()
+    }
+
+    fn check(_ token: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+
+    /// Generators aim at the acting sender's token balance.
+    fn aim_with(_ token: Address, _ sender: u256) -> u256 uses (evm: mut Evm) {
+        balance_of(token, sender)
+    }
+
+    fn snapshot_with(_ token: Address, _ cast: Cast) -> MemVec<u256>
+    uses (evm: mut Evm)
+    {
+        snapshot_of(token, cast)
+    }
+
+    /// Run once on a fresh target. The per-step state invariants (conservation,
+    /// empty zero address) are checked inside `check_step_with`, which already
+    /// holds the after-snapshot, to save a third snapshot per call.
+    fn check_with(_ token: Address, _ cast: Cast) -> u256 uses (evm: mut Evm) {
+        state_invariants(snapshot_of(token, cast), cast)
+    }
+
+    fn check_step_with(
+        _ token: Address,
+        _ cast: Cast,
+        _ before: MemVec<u256>,
+        _ step: Step,
+        _ accepted: bool,
+    ) -> u256
+    uses (evm: mut Evm)
+    {
+        let after = snapshot_of(token, cast)
+        if !accepted {
+            if !same_words(before, after) {
+                return INV_FAILED_CALL_CHANGES_STATE
+            }
+            return 0
+        }
+        let broken = state_invariants(after, cast)
+        if broken != 0 {
+            return broken
+        }
+        let v = step.variant
+        let me = step.who
+        let mints_or_burns = v == MINT || v == BURN || v == BURN_FROM
+        if after[0] != before[0] && !mints_or_burns {
+            return INV_SUPPLY_CHANGED_WITHOUT_MINT_BURN
+        }
+        if v == TRANSFER {
+            if !moved_exactly(
+                before,
+                after,
+                cast,
+                me,
+                position(step.w0, cast),
+                step.w1,
+            ) {
+                return INV_BALANCES_MOVE_EXACTLY
+            }
+        } else if v == APPROVE {
+            let p = position(step.w0, cast)
+            if p >= accounts(cast) {
+                return INV_ALLOWANCE_WRONG
+            }
+            if p <= cast.count && allow_at(after, cast, me, p) != step.w1 {
+                return INV_ALLOWANCE_WRONG
+            }
+        } else if v == TRANSFER_FROM {
+            if step.w2 == 0 {
+                if !same_words(before, after) {
+                    return INV_BALANCES_MOVE_EXACTLY
+                }
+                return 0
+            }
+            // Only senders can have approved anyone, and this sender must have
+            // been approved by `from` for at least `amount`.
+            let owner = position(step.w0, cast)
+            if owner > cast.count {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if allow_at(before, cast, owner, me) < step.w2 {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if !fell_by(
+                allow_at(after, cast, owner, me),
+                allow_at(before, cast, owner, me),
+                step.w2,
+            ) {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if !moved_exactly(
+                before,
+                after,
+                cast,
+                owner,
+                position(step.w1, cast),
+                step.w2,
+            ) {
+                return INV_BALANCES_MOVE_EXACTLY
+            }
+        } else if v == MINT {
+            // The test account (sender 0) is the only minter.
+            if me != 0 {
+                return INV_MINT_WITHOUT_ROLE
+            }
+            let p = position(step.w0, cast)
+            if p >= accounts(cast) {
+                return INV_MINT_WRONG
+            }
+            if !rose_by(after[0], before[0], step.w1)
+                || !rose_by(bal_at(after, p), bal_at(before, p), step.w1) {
+                return INV_MINT_WRONG
+            }
+        } else if v == BURN {
+            if !fell_by(after[0], before[0], step.w0)
+                || !fell_by(bal_at(after, me), bal_at(before, me), step.w0) {
+                return INV_BURN_WRONG
+            }
+        } else if v == BURN_FROM {
+            if step.w1 == 0 {
+                if !same_words(before, after) {
+                    return INV_BURN_WRONG
+                }
+                return 0
+            }
+            let owner = position(step.w0, cast)
+            if owner > cast.count || allow_at(before, cast, owner, me) < step.w1 {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if !fell_by(
+                allow_at(after, cast, owner, me),
+                allow_at(before, cast, owner, me),
+                step.w1,
+            ) {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if !fell_by(after[0], before[0], step.w1)
+                || !fell_by(bal_at(after, owner), bal_at(before, owner), step.w1) {
+                return INV_BURN_WRONG
+            }
+        } else if v == INCREASE {
+            let p = position(step.w0, cast)
+            if p >= accounts(cast) {
+                return INV_ALLOWANCE_WRONG
+            }
+            if p <= cast.count {
+                if !rose_by(
+                    allow_at(after, cast, me, p),
+                    allow_at(before, cast, me, p),
+                    step.w1,
+                ) {
+                    return INV_ALLOWANCE_WRONG
+                }
+            }
+        } else if v == DECREASE {
+            let p = position(step.w0, cast)
+            if p >= accounts(cast) {
+                return INV_ALLOWANCE_WRONG
+            }
+            if p <= cast.count {
+                if !fell_by(
+                    allow_at(after, cast, me, p),
+                    allow_at(before, cast, me, p),
+                    step.w1,
+                ) {
+                    return INV_ALLOWANCE_WRONG
+                }
+            }
+        }
+        0
+    }
+}

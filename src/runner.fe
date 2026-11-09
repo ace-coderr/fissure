@@ -6,6 +6,7 @@
 //! `mut`, never ambient state.
 
 use core::ptr::MemVec
+use ingot::cast::Cast
 use ingot::gen::Env
 use ingot::menu::{Menu, Step}
 use ingot::prng::{Draw, Prng}
@@ -40,6 +41,37 @@ pub trait Harness {
     uses (evm: mut Evm)
     {
         0
+    }
+
+    // Multi-sender variants of the hooks. The defaults call the single-sender
+    // hooks above, so a harness that never uses a `Cast` ignores these. A
+    // multi-sender harness overrides them to see the cast's addresses.
+
+    /// `aim`, for the account `sender` that is about to make a call.
+    fn aim_with(_ target: Address, _ sender: u256) -> u256 uses (evm: mut Evm) {
+        Self::aim(target)
+    }
+
+    fn snapshot_with(_ target: Address, _ cast: Cast) -> MemVec<u256>
+    uses (evm: mut Evm)
+    {
+        Self::snapshot(target)
+    }
+
+    fn check_step_with(
+        _ target: Address,
+        _ cast: Cast,
+        _ before: MemVec<u256>,
+        _ step: Step,
+        _ accepted: bool,
+    ) -> u256
+    uses (evm: mut Evm)
+    {
+        Self::check_step(target, before, step, accepted)
+    }
+
+    fn check_with(_ target: Address, _ cast: Cast) -> u256 uses (evm: mut Evm) {
+        Self::check(target)
     }
 }
 
@@ -122,13 +154,24 @@ pub fn zeros(_ n: u256) -> MemVec<u256> {
     v
 }
 
-fn world<H: Harness>(_ target: Address) -> Env uses (evm: mut Evm) {
-    Env { target_balance: H::aim(target), sender: evm.address().word() }
+fn world<H: Harness>(_ target: Address, _ cast: Cast, _ sender: u256) -> Env
+uses (evm: mut Evm)
+{
+    Env { target_balance: H::aim_with(target, sender), sender, root: evm.address().word(), cast }
 }
 
 /// Deploy a fresh target and make `cfg.steps` random calls, checking the
 /// invariants after each. Stops at the first broken invariant.
 pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) {
+    fuzz_cast<H>(cfg, salt, Cast::none())
+}
+
+/// `fuzz` with several senders: each call is made by the test account or by one
+/// of the relays in `cast` (see `Cast::deploy`). The sender of each call is
+/// drawn from the seed like everything else.
+pub fn fuzz_cast<H: Harness>(_ cfg: Config, _ salt: u256, _ cast: Cast) -> Run
+uses (evm: mut Evm)
+{
     let len = H::Calls::LEN
     if len == 0 {
         revert_error(EmptyMenu {})
@@ -146,7 +189,8 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
         steps: MemVec<Step>::new(),
     }
 
-    let pre = H::check(target)
+    let root = evm.address().word()
+    let pre = H::check_with(target, cast)
     if pre != 0 {
         run.broken = pre
         return run
@@ -154,13 +198,24 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
 
     var i: u256 = 0
     while i < cfg.steps {
+        require_budget()
         var rng = Prng::seeded(Prng::derive(cfg.seed, i))
         let which = rng.below(len)
-        var step = H::Calls::draw_at(which, world<H>(target), mut rng)
+        // Only a run with relays draws a sender, so single-sender seeds are
+        // unchanged.
+        var who: u256 = 0
+        if cast.count > 0 {
+            who = rng.below(cast.count + 1)
+        }
+        let sender = cast.account(who, root)
+        var step = H::Calls::draw_at(which, world<H>(target, cast, sender), mut rng)
         step.variant = which
+        step.who = who
 
-        let before = H::snapshot(target)
-        let accepted = H::Calls::fire_at(which, target, cfg.gas, step)
+        let before = H::snapshot_with(target, cast)
+        var via: u256 = 0
+        if who != 0 { via = sender }
+        let accepted = H::Calls::fire_at(which, target, cfg.gas, step, via)
         run.steps.push(step)
         run.executed = run.executed + 1
         run.calls.set(which as usize, run.calls[which as usize] + 1)
@@ -169,9 +224,9 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
             run.ok.set(which as usize, run.ok[which as usize] + 1)
         }
 
-        var broke = H::check_step(target, before, step, accepted)
+        var broke = H::check_step_with(target, cast, before, step, accepted)
         if broke == 0 {
-            broke = H::check(target)
+            broke = H::check_with(target, cast)
         }
         if broke != 0 {
             run.broken = broke
@@ -189,21 +244,39 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
 pub fn replay<H: Harness>(_ steps: MemVec<Step>, _ gas: u256, _ salt: u256) -> u256
 uses (evm: mut Evm)
 {
+    replay_cast<H>(steps, gas, salt, Cast::none())
+}
+
+/// `replay` for a multi-sender run: each step's `who` picks its sender from `cast`.
+pub fn replay_cast<H: Harness>(
+    _ steps: MemVec<Step>,
+    _ gas: u256,
+    _ salt: u256,
+    _ cast: Cast,
+) -> u256
+uses (evm: mut Evm)
+{
     require_funds<H>(steps.len() as u256)
     require_budget()
     let target = H::deploy(salt)
-    let pre = H::check(target)
+    let root = evm.address().word()
+    let pre = H::check_with(target, cast)
     if pre != 0 { return pre }
     var i: usize = 0
     while i < steps.len() {
+        require_budget()
         let step = steps[i]
-        let before = H::snapshot(target)
-        let accepted = H::Calls::fire_at(step.variant, target, gas, step)
-        let stepped = H::check_step(target, before, step, accepted)
+        let before = H::snapshot_with(target, cast)
+        var via: u256 = 0
+        if step.who != 0 {
+            via = cast.account(step.who, root)
+        }
+        let accepted = H::Calls::fire_at(step.variant, target, gas, step, via)
+        let stepped = H::check_step_with(target, cast, before, step, accepted)
         if stepped != 0 {
             return stepped
         }
-        let broke = H::check(target)
+        let broke = H::check_with(target, cast)
         if broke != 0 { return broke }
         i = i + 1
     }

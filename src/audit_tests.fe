@@ -106,7 +106,9 @@ fn zero_runs_is_not_a_pass() uses (evm: mut Evm) {
 #[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
 fn replaying_an_out_of_range_entry_is_harmless() uses (evm: mut Evm) {
     var steps = MemVec<Step>::new()
-    steps.push(Step { variant: 99, value: 0, w0: 0, w1: 0, w2: 0 })
+    steps.push(
+            Step { variant: 99, value: 0, w0: 0, w1: 0, w2: 0, who: 0 },
+        )
     assert!(replay<OkVault>(steps, 300000, 1) == 0)
     assert!(replay<OkVault>(MemVec<Step>::new(), 300000, 2) == 0)
 }

@@ -7,14 +7,20 @@
 //! balance. The sender's funds are deliberately absent: they change as runs spend
 //! them, which would make the same seed produce different calls.
 
+use ingot::cast::Cast
 use ingot::prng::{Draw, WORD_MAX}
 
 /// What a generator may look at when it draws a value.
 pub struct Env {
     /// Native balance currently held by the contract under test.
     pub target_balance: u256,
-    /// The account that sends every call (the test account), as an ABI word.
+    /// The account making THIS call, as an ABI word: the test account, or a
+    /// relay of the cast.
     pub sender: u256,
+    /// The test account itself (sender number 0), as an ABI word.
+    pub root: u256,
+    /// The relays that can also send calls (empty for a single-sender run).
+    pub cast: Cast,
 }
 
 pub trait Generator {
@@ -80,19 +86,34 @@ pub struct Holder {}
 
 impl Generator for Holder {
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        if env.cast.count == 0 {
+            let pick = rng.below(8)
+            if pick == 0 { return 0 }
+            if pick <= 4 {
+                return env.sender
+            }
+            return 0x1000 + rng.below(4)
+        }
+        // With relays: zero (1/8), the acting sender (3/8), any member of the
+        // cast including the test account (2/8), an actor (2/8).
         let pick = rng.below(8)
         if pick == 0 { return 0 }
-        if pick <= 4 {
+        if pick <= 3 {
             return env.sender
+        }
+        if pick <= 5 {
+            return env.cast.account(rng.below(env.cast.count + 1), env.root)
         }
         0x1000 + rng.below(4)
     }
 
-    /// Actor -> sender -> zero address; and a lower-numbered actor.
+    /// Any non-sender account -> the acting sender -> the zero address; and a
+    /// lower-numbered actor. Never leaves {zero, test account, relays, actors}.
     fn simpler(_ env: Env, _ v: u256, _ attempt: u256) -> u256 {
         let is_actor = v >= 0x1000 && v <= 0x1003
+        let is_member = is_actor || v == env.root || env.cast.contains(v)
         if attempt == 0 { return 0 }
-        if attempt == 1 && is_actor {
+        if attempt == 1 && is_member && v != env.sender {
             return env.sender
         }
         if attempt == 2 && is_actor && v > 0x1000 {

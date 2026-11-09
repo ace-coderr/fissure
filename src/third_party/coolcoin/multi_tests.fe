@@ -1,0 +1,130 @@
+//! Multi-sender runs against the CoolCoin ERC-20 and its mutants: calls come
+//! from the test account or from two relay contracts.
+
+use ingot::cast::Cast
+use ingot::hunt::{Hunt, emit_hunt, hunt_cast}
+use ingot::runner::Config
+use super::harness::Original
+use super::harness_multi::Erc20MultiSuite
+use super::mutant::Mutant
+
+#[event]
+struct MultiMutantResult {
+    id: u256,
+    found: bool,
+    seed: u256,
+    invariant: u256,
+    original_len: u256,
+    shrunk_len: u256,
+    attempts: u256,
+    accepted: u256,
+}
+
+fn config() -> Config {
+    Config { seed: 4242, steps: 60, gas: 400000 }
+}
+
+fn probe<const ID: usize>() -> Hunt uses (evm: mut Evm) {
+    let cast = Cast::deploy(2)
+    let h = hunt_cast<Erc20MultiSuite<Mutant<ID>>>(config(), 25, cast)
+    evm.emit(
+        MultiMutantResult {
+            id: ID as u256,
+            found: h.found,
+            seed: h.seed,
+            invariant: h.shrunk.invariant,
+            original_len: h.original_len,
+            shrunk_len: h.shrunk.steps.len() as u256,
+            attempts: h.shrunk.attempts,
+            accepted: h.accepted,
+        },
+    )
+    emit_hunt<Erc20MultiSuite<Mutant<ID>>>(h)
+    h
+}
+
+#[test]
+fn multi_original_is_clean() uses (evm: mut Evm) {
+    let cast = Cast::deploy(2)
+    let h = hunt_cast<Erc20MultiSuite<Original>>(config(), 8, cast)
+    assert!(!h.found)
+    assert!(h.accepted > 100)
+    // every menu entry was accepted at least once, by some sender
+    var e: usize = 0
+    while e < h.ok.len() {
+        assert!(h.ok[e] > 0)
+        e = e + 1
+    }
+}
+
+#[test]
+fn multi_mutant_0_control_is_clean() uses (evm: mut Evm) {
+    let h = probe<0>()
+    assert!(!h.found)
+}
+
+#[test]
+fn multi_mutant_1_transfer_does_not_debit() uses (evm: mut Evm) {
+    let h = probe<1>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_2_whole_allowance_not_spent() uses (evm: mut Evm) {
+    let h = probe<2>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_3_missing_balance_check() uses (evm: mut Evm) {
+    let h = probe<3>()
+    assert!(!h.found)
+}
+
+#[test]
+fn multi_mutant_4_wrong_event_amount() uses (evm: mut Evm) {
+    let h = probe<4>()
+    assert!(!h.found)
+}
+
+#[test]
+fn multi_mutant_5_approve_adds() uses (evm: mut Evm) {
+    let h = probe<5>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_6_burn_keeps_supply() uses (evm: mut Evm) {
+    let h = probe<6>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_7_mint_to_zero_address() uses (evm: mut Evm) {
+    let h = probe<7>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_8_self_transfer_mints() uses (evm: mut Evm) {
+    let h = probe<8>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_9_wrong_spender() uses (evm: mut Evm) {
+    let h = probe<9>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_10_mint_without_access_control() uses (evm: mut Evm) {
+    let h = probe<10>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn multi_mutant_11_full_balance_transfer_short() uses (evm: mut Evm) {
+    let h = probe<11>()
+    assert!(h.found && h.shrunk.reproduced)
+}

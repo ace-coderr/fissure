@@ -8,9 +8,10 @@
 //! same invariant still breaks, so the result always fails.
 
 use core::ptr::MemVec
+use ingot::cast::Cast
 use ingot::gen::Env
 use ingot::menu::{Menu, Step}
-use ingot::runner::{Harness, Run, replay}
+use ingot::runner::{Harness, Run, replay_cast}
 
 /// Replays use salts from here up, clear of the salts used by fuzz runs.
 const SHRINK_SALT_BASE: u256 = 1_000_000
@@ -79,25 +80,34 @@ fn still_fails<H: Harness>(
     _ candidate: MemVec<Step>,
     _ invariant: u256,
     _ gas: u256,
+    _ cast: Cast,
     _ attempts: mut u256,
 ) -> bool
 uses (evm: mut Evm)
 {
     let salt = SHRINK_SALT_BASE + attempts
     attempts = attempts + 1
-    replay<H>(candidate, gas, salt) == invariant
+    replay_cast<H>(candidate, gas, salt, cast) == invariant
 }
 
 pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm) {
+    shrink_cast<H>(run, gas, Cast::none())
+}
+
+/// `shrink` for a multi-sender run; it also moves each call to a lower-numbered
+/// sender when the failure survives.
+pub fn shrink_cast<H: Harness>(_ run: Run, _ gas: u256, _ cast: Cast) -> Shrunk
+uses (evm: mut Evm)
+{
     var attempts: u256 = 0
     var steps = prefix(run.steps, run.at as usize + 1)
     if run.broken == 0 {
         return Shrunk { steps: copy_of(run.steps), invariant: 0, reproduced: false, attempts: 0 }
     }
     let inv = run.broken
-    let world = Env { target_balance: 0, sender: evm.address().word() }
+    let root = evm.address().word()
 
-    if !still_fails<H>(steps, inv, gas, mut attempts) {
+    if !still_fails<H>(steps, inv, gas, cast, mut attempts) {
         return Shrunk { steps: copy_of(run.steps), invariant: inv, reproduced: false, attempts }
     }
 
@@ -105,7 +115,7 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
     // state outside the target (an actor's balance, say), which earlier replays
     // have changed. Shrinking would "succeed" with zero calls, which is wrong.
     let none = MemVec<Step>::new()
-    if still_fails<H>(none, inv, gas, mut attempts) {
+    if still_fails<H>(none, inv, gas, cast, mut attempts) {
         return Shrunk { steps: copy_of(run.steps), invariant: inv, reproduced: false, attempts }
     }
 
@@ -122,7 +132,7 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
             var start: usize = 0
             while start < steps.len() && attempts < MAX_ATTEMPTS {
                 let cand = without(steps, start, chunk)
-                if still_fails<H>(cand, inv, gas, mut attempts) {
+                if still_fails<H>(cand, inv, gas, cast, mut attempts) {
                     steps = cand
                     changed = true
                 } else {
@@ -132,9 +142,41 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
             chunk = chunk / 2
         }
 
-        // Pass 2: simplify each word of each call.
+        // Pass 2: simplify the sender, then each word, of each call.
         var i: usize = 0
         while i < steps.len() && attempts < MAX_ATTEMPTS {
+            var moving = true
+            var hops: u256 = 0
+            while moving && hops < 4 && attempts < MAX_ATTEMPTS {
+                moving = false
+                hops = hops + 1
+                let w = steps[i].who
+                if w > 0 {
+                    var c: u256 = 0
+                    while c < 2 && !moving {
+                        var lower = w - 1
+                        if c == 0 { lower = 0 }
+                        if lower < w {
+                            var cand = copy_of(steps)
+                            var moved = steps[i]
+                            moved.who = lower
+                            cand.set(i, moved)
+                            if still_fails<H>(cand, inv, gas, cast, mut attempts) {
+                                steps = cand
+                                moving = true
+                                changed = true
+                            }
+                        }
+                        c = c + 1
+                    }
+                }
+            }
+            let world = Env {
+                target_balance: 0,
+                sender: cast.account(steps[i].who, root),
+                root,
+                cast,
+            }
             var k: u256 = 0
             while k < 4 {
                 var tries: u256 = 0
@@ -152,7 +194,7 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
                             if v != cur {
                                 var cand = copy_of(steps)
                                 cand.set(i, with_field(steps[i], k, v))
-                                if still_fails<H>(cand, inv, gas, mut attempts) {
+                                if still_fails<H>(cand, inv, gas, cast, mut attempts) {
                                     steps = cand
                                     progress = true
                                     changed = true
@@ -168,7 +210,7 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
         }
     }
     // Belt and braces: the result must fail when replayed once more.
-    if !still_fails<H>(steps, inv, gas, mut attempts) {
+    if !still_fails<H>(steps, inv, gas, cast, mut attempts) {
         return Shrunk { steps: copy_of(run.steps), invariant: inv, reproduced: false, attempts }
     }
     Shrunk { steps, invariant: inv, reproduced: true, attempts }
