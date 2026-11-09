@@ -13,8 +13,8 @@ Fe Builders Challenge, submission deadline November 24, 2026, 23:59 UTC.
 
 The full SHA is entered in the submission form and is the head of `main` at
 submission time. All library, test, contract and script code was last changed in
-commit `fc28769a3689ccd6908df1b036c7afbdbf2346cb`; later commits change only
-documentation. (Verify with `git diff fc28769 HEAD --stat`.)
+commit `2d29f5c80d614a52b2eb0cc56892b04ee9fda0da`; later commits change only
+documentation. (Verify with `git diff 2d29f5c HEAD --stat`.)
 
 ## Reproduction
 
