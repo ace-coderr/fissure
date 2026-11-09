@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Hero } from "../components/Hero";
 import { DotNumber } from "../components/DotNumber";
 import { RiseHeading, Ticker } from "../components/Motion";
+import { useTitle } from "../lib/title";
 import { Bracket, copyText, Inline } from "../components/primitives";
 import { demo, REPO, shortSha, stats, ticker } from "../lib/data";
 import { useState } from "react";
@@ -23,23 +24,30 @@ function Tile({ n, value, label, label2, note }: { n: string; value: string; lab
 
 function SeedCopy() {
   const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
     <button
       className="mini"
       onClick={async () => {
         if (await copyText(demo.seed)) {
           setDone(true);
-          setTimeout(() => setDone(false), 1600);
+        } else {
+          setFailed(true);
         }
+        setTimeout(() => {
+          setDone(false);
+          setFailed(false);
+        }, 1600);
       }}
       aria-label="Copy the full seed"
     >
-      {done ? "copied" : "copy seed"}
+      {done ? "copied" : failed ? "copy blocked" : "copy seed"}
     </button>
   );
 }
 
 export default function Overview() {
+  useTitle("Fissure: invariant testing for Fe");
   const m = stats.mutants;
   const seedShort = `${demo.seed.slice(0, 10)}…${demo.seed.slice(-7)}`;
   return (
@@ -73,7 +81,7 @@ export default function Overview() {
       <section className="sec wrap" aria-labelledby="numbers">
         <div className="sec-head">
           <Bracket n="02">Numbers</Bracket>
-          <RiseHeading text="Measured, not claimed" />
+          <RiseHeading text="What was measured" />
           <p className="sec-lede">
             From <code className="code">fe test</code> and the decoded results of the mutation study, at the commit named in the
             footer.
@@ -108,7 +116,7 @@ export default function Overview() {
           {stats.revertRate.typed}% of {stats.revertRate.calls} calls. These are small, author-made benchmarks:{" "}
           <a className="link" href={`${REPO}#honesty-what-the-evidence-does-and-does-not-show`} target="_blank" rel="noreferrer">
             what they do and do not show
-          </a>
+          <span className="sr-only"> (opens in a new tab)</span></a>
           .
         </p>
       </section>
@@ -140,7 +148,7 @@ export default function Overview() {
             <h3 className="move-h">A failure becomes small</h3>
             <p data-shift="">
               Candidates are replayed on fresh deployments: calls dropped, values simplified. A candidate stays only if the same invariant
-              still breaks.
+              still breaks. The result is locally minimal (no single call can be dropped), not proven globally minimal.
             </p>
           </li>
         </ol>
@@ -153,7 +161,7 @@ export default function Overview() {
             <RiseHeading text="One seeded bug, found" className="head head-2 on-dark-head" />
             <p data-shift="">{demo.bug.charAt(0).toUpperCase() + demo.bug.slice(1)}</p>
             <p className="dim">
-              The invariant: {demo.invariant.text}. Fissure ran {demo.config.runs} seeds of {demo.config.steps} calls and reported this.
+              The invariant: {demo.invariant.text}. Fissure may run up to {demo.config.runs} seeds of {demo.config.steps} calls; it stopped at the first failing run and reported this.
             </p>
             <Link className="btn" to="/replay">
               Replay it <span aria-hidden="true">→</span>
@@ -203,7 +211,7 @@ export default function Overview() {
                 <code className="code">fe test</code> reproduces all of this. README, audits and the mutation study are in{" "}
                 <code className="code">docs/</code>.
               </span>
-            </a>
+            <span className="sr-only"> (opens in a new tab)</span></a>
           </li>
         </ul>
       </section>

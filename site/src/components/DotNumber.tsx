@@ -24,15 +24,25 @@ const G: Record<string, string[]> = {
   " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
 };
 
-function Glyph({ ch }: { ch: string }) {
+// One <path> per glyph (all its dots as sub-paths) instead of one <circle> per dot:
+// about a third of the DOM nodes, and the same picture.
+const R = 0.4;
+const glyphPath = (ch: string): string => {
   const rows = G[ch] ?? G[" "];
-  const dots: [number, number][] = [];
-  rows.forEach((row, y) => [...row].forEach((c, x) => c === "1" && dots.push([x, y])));
+  let d = "";
+  rows.forEach((row, y) =>
+    [...row].forEach((c, x) => {
+      if (c === "1") d += `M${(x + 0.5 - R).toFixed(2)} ${y + 0.5}a${R} ${R} 0 1 0 ${2 * R} 0a${R} ${R} 0 1 0 ${-2 * R} 0`;
+    }),
+  );
+  return d;
+};
+const PATHS: Record<string, string> = Object.fromEntries(Object.keys(G).map((ch) => [ch, glyphPath(ch)]));
+
+function Glyph({ ch }: { ch: string }) {
   return (
     <svg className="glyph" viewBox="0 0 5 7" aria-hidden="true">
-      {dots.map(([x, y]) => (
-        <circle key={`${x}-${y}`} cx={x + 0.5} cy={y + 0.5} r={0.4} />
-      ))}
+      <path d={PATHS[ch] ?? PATHS[" "]} />
     </svg>
   );
 }

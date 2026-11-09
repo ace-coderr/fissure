@@ -4,6 +4,7 @@
 import { Fragment, useState } from "react";
 import { DotNumber } from "../components/DotNumber";
 import { RiseHeading } from "../components/Motion";
+import { useTitle } from "../lib/title";
 import { Bracket, copyText } from "../components/primitives";
 import { type Cell, type Mutant, mutants, REPO, stats } from "../lib/data";
 import { callLine, shortDecimal } from "../lib/format";
@@ -35,6 +36,7 @@ function Verdict({ cell }: { cell: Cell | null }) {
 
 function Seed({ seed }: { seed: string }) {
   const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
     <span className="seedline">
       <span title={seed}>{shortDecimal(seed, 12, 8)}</span>{" "}
@@ -43,12 +45,17 @@ function Seed({ seed }: { seed: string }) {
         onClick={async () => {
           if (await copyText(seed)) {
             setDone(true);
-            setTimeout(() => setDone(false), 1600);
+          } else {
+            setFailed(true);
           }
+          setTimeout(() => {
+            setDone(false);
+            setFailed(false);
+          }, 1600);
         }}
         aria-label={`Copy the full seed ${shortDecimal(seed, 6, 4)}`}
       >
-        {done ? "copied" : "copy"}
+        {done ? "copied" : failed ? "copy blocked" : "copy"}
       </button>
     </span>
   );
@@ -60,7 +67,7 @@ function Detail({ m }: { m: Mutant }) {
       <p className="detail-desc">
         {m.description.charAt(0).toUpperCase() + m.description.slice(1)}
         {m.kind ? <span className="dim-ink"> ({m.kind})</span> : null}
-        {m.heldOut ? <span className="tag">held out</span> : null}
+        {m.heldOut ? <>{" "}<span className="tag">held out</span></> : null}
       </p>
       <div className="detail-grid">
         {HARNESSES.map((h) => {
@@ -116,6 +123,7 @@ function Detail({ m }: { m: Mutant }) {
 }
 
 export default function Mutants() {
+  useTitle("Mutants: caught and missed · Fissure");
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<number>>(new Set());
   const all = mutants.mutants;
@@ -133,6 +141,7 @@ export default function Mutants() {
       return n;
     });
   const s = stats.mutants;
+  const firstSet = Math.max(...all.filter((m) => !m.heldOut && !m.control).map((m) => m.id)); // the mutants of the first study
   const misses = all.filter(anyMissed);
 
   return (
@@ -149,11 +158,11 @@ export default function Mutants() {
       <section className="wrap mut-sum" aria-label="Summary">
         <div className="mut-sum-grid">
           <div className="counter">
-            <Bracket>one sender, 1–11</Bracket>
+            <Bracket>one sender, 1–{firstSet}</Bracket>
             <DotNumber value={`${s.step7.single.caught}/${s.step7.single.total}`} label={`${s.step7.single.caught} of ${s.step7.single.total} caught with one sender`} cell="clamp(6px, 0.7vw + 1px, 9px)" />
           </div>
           <div className="counter">
-            <Bracket>two relays, 1–11</Bracket>
+            <Bracket>two relays, 1–{firstSet}</Bracket>
             <DotNumber value={`${s.step7.relays.caught}/${s.step7.relays.total}`} label={`${s.step7.relays.caught} of ${s.step7.relays.total} caught with relay senders`} cell="clamp(6px, 0.7vw + 1px, 9px)" />
           </div>
           <div className="counter">
@@ -171,7 +180,7 @@ export default function Mutants() {
           it was not shaped around.{" "}
           <a className="link" href={`${REPO}/blob/main/docs/mutation.md`} target="_blank" rel="noreferrer">
             Full study
-          </a>
+          <span className="sr-only"> (opens in a new tab)</span></a>
           .
         </p>
       </section>
@@ -227,7 +236,7 @@ export default function Mutants() {
                             {isOpen ? "−" : "+"}
                           </span>
                           {m.title}
-                          {m.heldOut ? <span className="tag">held out</span> : null}
+                          {m.heldOut ? <>{" "}<span className="tag">held out</span></> : null}
                         </button>
                       </td>
                       {HARNESSES.map((h) => (

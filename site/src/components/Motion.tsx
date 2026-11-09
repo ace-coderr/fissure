@@ -1,7 +1,7 @@
 // Motion pieces built on the shared easing and durations: masked heading rise,
 // the ticker, and the pointer field. Text is always real DOM text.
 
-import { type CSSProperties, type ElementType, useEffect, useRef } from "react";
+import { type CSSProperties, type ElementType, useEffect, useRef, useState } from "react";
 import { useFinePointer, useInView, useReducedMotion } from "../lib/motion";
 
 /** A heading whose words rise out of a mask on scroll, letter by letter. */
@@ -37,8 +37,14 @@ export function RiseHeading({
   );
 }
 
-/** A ticker of real phrases from the output. Static (and wrapped) under reduced motion. */
+/**
+ * A ticker of real phrases from the output. Static (and wrapped) under reduced
+ * motion. Moving text that lasts longer than five seconds needs a way to stop it
+ * (WCAG 2.2.2), so there is a pause button; hovering or focusing it also pauses.
+ */
 export function Ticker({ items, label }: { items: string[]; label: string }) {
+  const reduced = useReducedMotion();
+  const [paused, setPaused] = useState(false);
   const run = (hidden: boolean) => (
     <ul className="ticker-run" aria-hidden={hidden || undefined}>
       {items.map((t, k) => (
@@ -52,25 +58,39 @@ export function Ticker({ items, label }: { items: string[]; label: string }) {
     </ul>
   );
   return (
-    <section className="ticker on-dark" aria-label={label}>
+    <section className={`ticker on-dark ${paused ? "paused" : ""}`} aria-label={label}>
       <div className="ticker-track" style={{ "--n": items.length } as CSSProperties}>
         {run(false)}
         {run(true)}
       </div>
+      {reduced ? null : (
+        <button className="ticker-pause" aria-pressed={paused} onClick={() => setPaused((p) => !p)}>
+          <span className="sr-only">Ticker: </span>
+          {paused ? "play" : "pause"}
+        </button>
+      )}
     </section>
   );
+}
+
+/** Whether the machine looks too weak for the pointer effect (it is cosmetic). */
+function lowEnd(): boolean {
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  return (nav.hardwareConcurrency ?? 8) <= 2 || (nav.deviceMemory ?? 8) <= 2;
 }
 
 /**
  * Text near the cursor shifts slightly away from it. Elements opt in with the
  * `data-shift` attribute. Uses the CSS `translate` property (so it never fights
- * a `transform` animation), is off for touch and for reduced motion, and only
- * does work while the pointer is moving.
+ * a `transform` animation), is off for touch, for reduced motion and for weak
+ * machines, and only does work while the pointer is moving. Each frame reads
+ * every rectangle first and writes afterwards, so it causes one layout, not one
+ * per element.
  */
 export function PointerField() {
   const fine = useFinePointer();
   const reduced = useReducedMotion();
-  const active = fine && !reduced;
+  const active = fine && !reduced && !lowEnd();
   const state = useRef({ x: -9999, y: -9999, raf: 0, last: 0, shifted: new Set<HTMLElement>() });
 
   useEffect(() => {
@@ -86,14 +106,16 @@ export function PointerField() {
         return;
       }
       s.last = t;
+      // read phase
+      const els = Array.from(document.querySelectorAll<HTMLElement>("[data-shift]"));
+      const rects = els.map((el) => el.getBoundingClientRect());
+      // write phase
       const next = new Set<HTMLElement>();
-      document.querySelectorAll<HTMLElement>("[data-shift]").forEach((el) => {
-        const r = el.getBoundingClientRect();
+      els.forEach((el, i) => {
+        const r = rects[i];
         if (r.bottom < -R || r.top > window.innerHeight + R) return;
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        const dx = cx - s.x;
-        const dy = cy - s.y;
+        const dx = r.left + r.width / 2 - s.x;
+        const dy = r.top + r.height / 2 - s.y;
         const d = Math.hypot(dx, dy);
         if (d < R && d > 0.5) {
           const f = (1 - d / R) ** 2;

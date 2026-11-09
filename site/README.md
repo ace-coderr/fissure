@@ -11,7 +11,8 @@ npm install
 npm run data      # site/data/raw -> site/data/*.json (never edit the JSON)
 npm run dev       # local preview
 npm run build     # type-check and build to dist/
-npm test          # parsers, PRNG port, headline numbers, provenance
+npm test          # parsers, PRNG port, numbers vs README/docs, reduced motion
+npm run contrast  # WCAG contrast of every text/background pair
 ```
 
 ## Where the data comes from

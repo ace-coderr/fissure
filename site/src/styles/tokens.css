@@ -8,7 +8,7 @@
   --ink-soft: #46464b;
 
   /* Fe is iron: rust */
-  --rust: #b3380a; /* text and rules on paper (AA on --paper) */
+  --rust: #9a2f07; /* text and rules on paper and its tints (AA, see npm run contrast) */
   --rust-bright: #ff6a2b; /* fills and text on graphite */
 
   /* graphite panels */

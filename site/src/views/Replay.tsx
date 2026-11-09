@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { DotNumber } from "../components/DotNumber";
 import { RiseHeading } from "../components/Motion";
+import { useTitle } from "../lib/title";
 import { Bracket, copyText } from "../components/primitives";
 import { demo, REPO, stats } from "../lib/data";
 import { callLine, shortDecimal } from "../lib/format";
@@ -85,6 +86,7 @@ const clip = (text: string, n: number) => (
 );
 
 export default function Replay() {
+  useTitle("Replay: a failure, shrunk · Fissure");
   const reduced = useReducedMotion();
   const stageRef = useRef<HTMLDivElement>(null);
   const inView = useInView(stageRef, "0px 0px -20% 0px");
@@ -211,8 +213,8 @@ export default function Replay() {
         <RiseHeading as="h1" text="A failure, shrunk" className="head head-1" />
         <p className="sec-lede">
           This is the real failing run of the demo test, replayed from the repository&apos;s own output: seed, calls and values are the
-          ones <code className="code">fe test</code> produced. Fissure ran {demo.config.runs} seeds of {demo.config.steps} calls against
-          the vault with the seeded bug and stopped at the first that broke the invariant.
+          ones <code className="code">fe test</code> produced. Fissure may run up to {demo.config.runs} seeds of {demo.config.steps} calls against
+          the vault with the seeded bug; it stops at the first run that breaks the invariant, and shrinks it.
         </p>
       </section>
 
@@ -355,7 +357,7 @@ export default function Replay() {
           Reproduce it: <code className="code">fe test -f demo_ --show-logs</code>. Code commit{" "}
           <a className="link" href={`${REPO}/commit/${demo.provenance.codeCommit}`} target="_blank" rel="noreferrer">
             {demo.provenance.codeCommit.slice(0, 7)}
-          </a>
+          <span className="sr-only"> (opens in a new tab)</span></a>
           , captured {demo.provenance.captured}. <Link className="link" to="/mutants">See how it does on {stats.mutants.total} mutants of an ERC-20 →</Link>
         </p>
       </section>

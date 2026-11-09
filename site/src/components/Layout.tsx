@@ -29,6 +29,7 @@ export function Navbar() {
     }
     setOpen(false);
     window.scrollTo(0, 0);
+    document.getElementById("main")?.focus({ preventScroll: true });
   }, [loc.pathname]);
 
   return (
@@ -67,10 +68,10 @@ export function Footer() {
           <p className="foot-word">Fissure</p>
           <p className="foot-note">
             Stateful invariant testing for Fe, written in Fe. Apache-2.0. Every number on this site is generated from the
-            repository&apos;s own test output: {p.fe}, code commit{" "}
+            repository&apos;s own test output and docs: {p.fe}, code commit{" "}
             <a className="link" href={`${REPO}/commit/${p.codeCommit}`} target="_blank" rel="noreferrer">
               {shortSha(p.codeCommit)}
-            </a>
+            <span className="sr-only"> (opens in a new tab)</span></a>
             , captured {p.captured}.
           </p>
         </div>
@@ -78,29 +79,29 @@ export function Footer() {
           <li>
             <a href={REPO} target="_blank" rel="noreferrer">
               Repository
-            </a>
+            <span className="sr-only"> (opens in a new tab)</span></a>
           </li>
           <li>
             <a href={`${REPO}#readme`} target="_blank" rel="noreferrer">
               README
-            </a>
+            <span className="sr-only"> (opens in a new tab)</span></a>
           </li>
           <li>
             <a href={`${REPO}/blob/main/docs/mutation.md`} target="_blank" rel="noreferrer">
               Mutation study
-            </a>
+            <span className="sr-only"> (opens in a new tab)</span></a>
           </li>
           <li>
             <a href={`${REPO}/blob/main/docs/audit.md`} target="_blank" rel="noreferrer">
               Audit
-            </a>
+            <span className="sr-only"> (opens in a new tab)</span></a>
           </li>
         </ul>
         <p className="foot-by">
           Built by{" "}
           <a className="pill" href="https://x.com/_ace_won" target="_blank" rel="noreferrer">
             ace
-          </a>
+          <span className="sr-only"> (opens in a new tab)</span></a>
         </p>
       </div>
     </footer>
