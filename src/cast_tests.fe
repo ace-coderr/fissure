@@ -1,0 +1,223 @@
+//! Tests for multi-sender runs: relays, the cast, sender choice, shrinking the
+//! sender, and determinism.
+
+use core::ptr::MemVec
+use ingot::cast::{Cast, MAX_RELAYS}
+use ingot::gen::{Actor, Pay, Zero}
+use ingot::hunt::hunt_cast
+use ingot::menu::{Call0, Call1, Cons, Nil, Step}
+use ingot::relay::{Relay, RelayMsg}
+use ingot::runner::{Config, Harness, fuzz, fuzz_cast, replay_cast}
+use ingot::vault_ok::{VaultMsg, VaultOk}
+use std::evm::{Duration, ether}
+
+type Calls = Cons<Call0<VaultMsg::Deposit, Pay>, Cons<Call1<VaultMsg::Withdraw, Zero, Actor>, Nil>>
+
+fn deploy_vault(_ salt: u256) -> Address uses (evm: mut Evm) {
+    evm.create<VaultOk>(value: Wei::zero(), args: (Duration::zero(),))
+}
+
+/// Breaks once the vault holds 3 ether, whoever deposited it.
+struct Big {}
+
+impl Harness for Big {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        if evm.balance(target) >= ether(3) {
+            return 2
+        }
+        0
+    }
+}
+
+/// Never breaks.
+struct Fine {}
+
+impl Harness for Fine {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+}
+
+fn same_steps(_ a: MemVec<Step>, _ b: MemVec<Step>) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    var i: usize = 0
+    while i < a.len() {
+        let x = a[i]
+        let y = b[i]
+        if x.variant != y.variant
+            || x.value != y.value
+            || x.w0 != y.w0
+            || x.w1 != y.w1
+            || x.w2 != y.w2
+            || x.who != y.who {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn the_target_sees_the_relay_as_the_sender() uses (evm: mut Evm) {
+    let vault = deploy_vault(0)
+    let relay = evm.create<Relay>(value: Wei::zero(), args: ())
+    let ok: bool = evm
+        .call(
+            addr: relay,
+            gas: 500000,
+            value: ether(1),
+            message: RelayMsg::Relay {
+                target: vault,
+                selector: 0xd0e30db0,
+                size: 0,
+                w0: 0,
+                w1: 0,
+                w2: 0,
+                gas: 300000,
+            },
+        )
+    assert!(ok)
+    let relay_balance: Wei = evm
+        .call(
+            addr: vault,
+            gas: 100000,
+            value: Wei::zero(),
+            message: VaultMsg::BalanceOf { owner: relay },
+        )
+    let own_balance: Wei = evm
+        .call(
+            addr: vault,
+            gas: 100000,
+            value: Wei::zero(),
+            message: VaultMsg::BalanceOf { owner: evm.address() },
+        )
+    assert!(relay_balance == ether(1))
+    assert!(own_balance == Wei::zero())
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn a_rejected_inner_call_is_reported_not_propagated() uses (evm: mut Evm) {
+    let vault = deploy_vault(0)
+    let relay = evm.create<Relay>(value: Wei::zero(), args: ())
+    // withdraw(address) with nothing deposited: the vault reverts, the relay says false
+    let ok: bool = evm
+        .call(
+            addr: relay,
+            gas: 500000,
+            value: Wei::zero(),
+            message: RelayMsg::Relay {
+                target: vault,
+                selector: 0x51cff8d9,
+                size: 32,
+                w0: 0x1000,
+                w1: 0,
+                w2: 0,
+                gas: 300000,
+            },
+        )
+    assert!(!ok)
+}
+
+#[test]
+fn a_cast_maps_senders_to_accounts() {
+    let c = Cast { count: 2, r0: 0xa1, r1: 0xa2, r2: 0 }
+    assert!(c.account(0, 0x99) == 0x99)
+    assert!(c.account(1, 0x99) == 0xa1)
+    assert!(c.account(2, 0x99) == 0xa2)
+    assert!(c.account(3, 0x99) == 0)
+    assert!(c.contains(0xa1) && c.contains(0xa2))
+    assert!(!c.contains(0x99) && !c.contains(0))
+    assert!(!Cast::none().contains(0))
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn deploying_a_cast_gives_distinct_working_relays() uses (evm: mut Evm) {
+    let c = Cast::deploy(3)
+    assert!(c.count == 3 && MAX_RELAYS == 3)
+    assert!(c.r0 != 0 && c.r1 != 0 && c.r2 != 0)
+    assert!(c.r0 != c.r1 && c.r1 != c.r2 && c.r0 != c.r2)
+    assert!(Cast::deploy(0).count == 0)
+}
+
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn too_many_relays_is_an_error() uses (evm: mut Evm) {
+    let _ = Cast::deploy(4)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn without_a_cast_every_call_is_the_test_accounts() uses (evm: mut Evm) {
+    let run = fuzz<Fine>(Config { seed: 3, steps: 60, gas: 300000 }, 0)
+    var i: usize = 0
+    while i < run.steps.len() {
+        assert!(run.steps[i].who == 0)
+        i = i + 1
+    }
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn with_a_cast_calls_come_from_every_sender() uses (evm: mut Evm) {
+    let cast = Cast::deploy(2)
+    let run = fuzz_cast<Fine>(Config { seed: 3, steps: 90, gas: 300000 }, 0, cast)
+    var seen0 = false
+    var seen1 = false
+    var seen2 = false
+    var i: usize = 0
+    while i < run.steps.len() {
+        let w = run.steps[i].who
+        assert!(w <= 2)
+        if w == 0 { seen0 = true }
+        if w == 1 { seen1 = true }
+        if w == 2 { seen2 = true }
+        i = i + 1
+    }
+    assert!(seen0 && seen1 && seen2)
+    assert!(run.accepted > 0)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn same_seed_same_calls_and_same_senders() uses (evm: mut Evm) {
+    let cast = Cast::deploy(2)
+    let a = fuzz_cast<Fine>(Config { seed: 17, steps: 60, gas: 300000 }, 0, cast)
+    let burn = fuzz_cast<Fine>(Config { seed: 18, steps: 60, gas: 300000 }, 0, cast)
+    let b = fuzz_cast<Fine>(Config { seed: 17, steps: 60, gas: 300000 }, 0, cast)
+    assert!(same_steps(a.steps, b.steps))
+    assert!(a.accepted == b.accepted)
+    assert!(burn.executed == 60)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn the_shrinker_moves_the_call_to_the_test_account_when_it_can()
+uses (evm: mut Evm)
+{
+    let cast = Cast::deploy(2)
+    let h = hunt_cast<Big>(Config { seed: 100, steps: 60, gas: 300000 }, 40, cast)
+    assert!(h.found && h.shrunk.reproduced)
+    assert!(h.shrunk.steps.len() == 1)
+    // any sender can deposit 3 ether, so the simplest one remains
+    assert!(h.shrunk.steps[0].who == 0)
+    assert!(
+        replay_cast<Big>(h.shrunk.steps, 300000, 7_000_000, cast) == 2,
+    )
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn a_sequence_replays_through_the_same_relays() uses (evm: mut Evm) {
+    let cast = Cast::deploy(2)
+    let run = fuzz_cast<Big>(Config { seed: 5, steps: 80, gas: 300000 }, 0, cast)
+    assert!(run.broken == 2)
+    assert!(replay_cast<Big>(run.steps, 300000, 8_000_000, cast) == 2)
+}

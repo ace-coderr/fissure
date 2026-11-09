@@ -117,7 +117,9 @@ function printSequence(seed, invariant, originalLen, steps, extra = "") {
     const by = s.who === undefined || s.who === 0n ? "" : `   [sender: relay ${s.who}]`;
     console.log(`    ${i + 1}. ${label}${value}   words=[${args}]${by}`);
   });
-  console.log(`  reproduce: fuzz with Config { seed: ${seed}, .. } or replay the calls above`);
+  const relays = steps.reduce((m, s) => (s.who !== undefined && s.who > m ? s.who : m), 0n);
+  const cast = relays > 0n ? ` (multi-sender: use a Cast of at least ${relays} relays)` : "";
+  console.log(`  reproduce: fuzz with Config { seed: ${seed}, .. } or replay the calls above${cast}`);
 }
 
 // ---- parse the fe output ----

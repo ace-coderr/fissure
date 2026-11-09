@@ -87,7 +87,7 @@ Shrunk sequences (A = the sender; all from `fe test --show-logs`):
 - 11: `approve(A, 2^160-1)`, `transferFrom(A, A, 1000)` (amount = the whole balance;
   the allowance is not minimal, see limits)
 
-### Missed mutants, and why
+### Missed mutants, and why (single sender; mutants 9 and 10 are caught in step 8, below)
 
 - **3, missing balance check: equivalent mutant.** Fe's checked arithmetic reverts
   on `from_balance - amount` underflow, so removing the `assert!` changes nothing
@@ -122,3 +122,70 @@ the fix mutant 8 shrinks to a genuine self-transfer, asserted in the test.
 - Shrinking halves a word at most 12 times per round, so large values (mutant 11's
   allowance) are reduced, not minimised.
 - One run per mutant with a fixed seed; no statistics over many seeds.
+
+## Step 8: several senders (relay actors)
+
+Calls can now come from the test account or from relay contracts
+(`src/relay.fe`, `src/cast.fe`; see the README). The target sees a different
+`msg.sender` for each. The same 11 mutants, a multi-sender harness
+(`src/third_party/coolcoin/harness_multi.fe`, tests in `multi_tests.fe`): the test
+account plus 2 relays, 25 runs x 60 calls, seed 4242.
+
+| Mutant | Single sender | Two relays + test account |
+| --- | --- | --- |
+| 0 control | clean | clean |
+| 1 transfer does not debit | caught (6 -> 2, #5) | caught (21 -> 1, #1) |
+| 2 whole allowance not spent | caught (23 -> 2, #7) | caught (13 -> 2, #7) |
+| 3 missing balance check | missed (equivalent) | missed (equivalent) |
+| 4 wrong event amount | missed (no log access) | missed (no log access) |
+| 5 approve adds | caught (9 -> 2, #6) | caught (18 -> 2, #6) |
+| 6 burn keeps supply | caught (1 -> 1, #9) | caught (37 -> 1, #1) |
+| 7 mint to zero address | caught (26 -> 1, #2) | caught (42 -> 1, #2) |
+| 8 self-transfer mints | caught (6 -> 2, #5) | caught (21 -> 1, #1) |
+| 9 wrong spender in transferFrom | **missed** (one sender) | **caught (55 -> 2, #7)** |
+| 10 mint without access control | **missed** (one sender) | **caught (27 -> 1, #10)** |
+| 11 full-balance transfer short | caught (2 -> 2, #5) | caught (32 -> 2, #1) |
+| **Total** | **7 of 11** | **9 of 11** |
+
+(`calls -> shrunk`, then the broken invariant id. The ids differ between the two
+harnesses because they are different harnesses: the multi-sender one reports a
+failed conservation check where the single-sender one reported a finer-grained
+transfer check.)
+
+The two new catches, shrunk (`root` is the test account, `relay 1` the first relay):
+
+- 9: `root: increaseAllowance(root, 1)`, then `relay 1: transferFrom(from = root, to = relay 1, 1)`.
+  The mutant checks the allowance of `from` instead of the caller, so the relay
+  spends an allowance that was never granted to it.
+- 10: `relay 1: mint(relay-or-actor, 0)`. A relay is not the minter and the call
+  is accepted (invariant 10: only the test account may mint).
+
+Still missed, unchanged: 3 (equivalent) and 4 (events are not observable).
+
+### Honest notes on this result
+
+- **I tuned after seeing misses.** With the generic `Holder`/`Amount` generators
+  and 12 runs, mutants 2 and 9 were not found with relays: a spend has to match an
+  earlier approval's amount, between different senders, which is rare. I then
+  wrote harness-specific generators (`Party`: concentrate on the cast; `Tok`:
+  mostly small repeated amounts) and raised the runs to 25. Mutants 9 and 10 were
+  caught after that. That is a legitimate use of generators, and also the sort of
+  adjustment that flatters a benchmark; the mutants were not chosen afterwards,
+  but the generators were.
+- Multi-sender hunts cost more gas (measured below), so each runs fewer calls
+  per test.
+- Allowances are only tracked between senders (the zero address and actors never
+  send), to keep the snapshot small. An `approve` naming a non-sender spender is
+  not checked for its allowance.
+
+### Cost, measured
+
+One run of 60 calls on the unmodified ERC-20, snapshots included:
+
+| Mode | Gas per run | Gas per call |
+| --- | --- | --- |
+| single sender | 5.4 M | about 90 k |
+| test account + 2 relays | 8.9 M | about 149 k (1.65x) |
+
+A test has a fixed budget of 1 billion gas, memory included. The runner checks the
+remaining gas before every call and stops with `OutOfBudget` instead of dying.

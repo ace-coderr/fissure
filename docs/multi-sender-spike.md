@@ -1,7 +1,8 @@
 # Spike: can multiple senders be simulated with actor contracts?
 
 **Answer: yes. A 20-line relay contract makes the target see a different caller.
-Not built into Fissure yet: waiting for approval.**
+Built in step 8 after approval: see `src/relay.fe`, `src/cast.fe` and the end of
+`docs/mutation.md`. This page is the original spike report.**
 
 ## What was tried
 

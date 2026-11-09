@@ -161,3 +161,71 @@ are legal. Both were wrongly flagged by my first invariants; details in
 - **Mutation evidence is small**: 11 mutants chosen by the author.
 - **Third-party contract**: the CoolCoin source was copied from a web page whose
   license is not stated on the page (see SUBMISSION.md).
+
+---
+
+# Round 3 (step 8: several senders)
+
+## What was added
+
+`Step.who` (which sender), `Cast` (up to 3 relay contracts, deployed once per
+hunt), `fuzz_cast` / `replay_cast` / `shrink_cast` / `hunt_cast` / `check_cast`
+(the old names are unchanged and mean "no relays"), multi-sender hook variants on
+`Harness`, a per-step gas check, and a multi-sender ERC-20 harness.
+
+## Checked
+
+| Concern | Result |
+| --- | --- |
+| Single-sender seeds changed by the new code? | No. A sender is drawn from the seed only when a cast exists. The demo's seed, replay count and sequence are identical to before (and identical in CI) |
+| Determinism with relays | Decoded multi-sender results are identical across two default runs and `-O 2` (compared as sorted lines) |
+| CI equals local | The CI log of both mutation suites (117 lines) equals the local output line for line, including seeds and the address words of the test account and the relays. So the test account's address is the same in CI and locally |
+| Sender simplification | A failure any sender can cause shrinks to the test account (`the_shrinker_moves_the_call_to_the_test_account_when_it_can`) |
+| Replay through the same relays | Replaying a run's steps with the same cast reproduces the failure (`a_sequence_replays_through_the_same_relays`) |
+| Revert data with the sender field | A failing multi-sender `check_cast` decodes with `[sender: relay N]` in the report script |
+| Relay semantics | The target sees the relay as the sender; an inner revert is reported as `false` and not propagated (two tests) |
+| Too many relays | `Cast::deploy(4)` reverts with `TooManyRelays` |
+
+## Findings
+
+### 6. Budget exhaustion in the middle of a run (fixed)
+
+The `OutOfBudget` check ran only when a run started. Multi-sender runs are
+heavier, and 40 runs made the test halt with `OutOfGas` inside a run, with no
+explanation. The check now runs before every call, in `fuzz` and in `replay`.
+
+### 7. Three snapshots per call (fixed)
+
+The multi-sender ERC-20 harness took a state snapshot before the call, one
+after, and a third for the state invariants. The invariants now run on the
+after-snapshot, saving a third of the view calls.
+
+### 8. Generic generators were too sparse for two-party scenarios (documented)
+
+See the honest notes in `docs/mutation.md`: the generic generators missed
+mutants 2 and 9 with relays until harness-specific generators were written.
+
+## Limits (8e)
+
+- **Targets that reject contract callers.** A relay is a contract, so a target
+  that requires `msg.sender` to be an EOA (an `extcodesize` or `tx.origin`
+  check) will reject every relayed call. Fissure cannot test such a target with
+  several senders. Not tried against such a contract.
+- **Ether sent through a relay and rejected stays in the relay.** The relay
+  itself succeeds (it only reports `false`), so the value the test account sent
+  with that call is not refunded. It is bounded by the per-call maximum value
+  that the runner already requires the test account to hold.
+- **At most 3 relays**, so at most 4 senders.
+- **Gas and memory.** A relayed call goes through two contracts: measured about
+  1.65x the gas per call of a direct call on the ERC-20 (149k vs 90k, snapshots
+  included). Fe never frees memory and a test has a fixed gas budget of 1e9
+  (memory included), so multi-sender hunts get fewer calls per test. `OutOfBudget` is raised
+  before the budget is gone.
+- **Relays start empty**: no ether of their own and, for a token, no tokens;
+  they receive tokens through transfers from the test account.
+- **Seeds depend on the test account's and the relays' addresses** (they appear
+  in generated address words). Equal in CI and locally here; not guaranteed
+  across Fe versions or different test setups.
+- **Not an independent review.** Written and checked by the author with AI
+  assistance.
+

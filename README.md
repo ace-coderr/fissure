@@ -80,9 +80,9 @@ crashed test. `docs/spike.md` records how this was found and what else was tried
   bugs found and fixed (seeds that did not reproduce; a shrinker that drifted to
   a different failure), and what remains unfixed.
 - **Tried on a real contract and on mutants.** The Fe Guide's ERC-20 (third-party)
-  has 11 seeded bugs: 7 caught and shrunk to 1-2 calls, 4 missed for stated
-  reasons (`docs/mutation.md`).
-- **73 Fe tests**, `fe fmt --check` clean, CI green.
+  has 11 seeded bugs: 7 caught and shrunk to 1-2 calls with one sender, 9 of 11
+  with several senders, 2 missed for stated reasons (`docs/mutation.md`).
+- **96 Fe tests**, `fe fmt --check` clean, CI green.
 
 ## Originality
 
@@ -105,8 +105,9 @@ revert 67.2% of calls; typed generators revert 13.0%, and the rest are the
 contract's own guards (`docs/revert-rate.md`). On a real ERC-20 (the Fe Guide's
 CoolCoin, third-party) Fissure found nothing in the unmodified contract (after
 I fixed two mistakes in my own invariants), and with 11 seeded bugs it caught 7
-and missed 4: one is equivalent, one needs log inspection, two need a second
-sender (`docs/mutation.md`). Small evidence, honestly reported.
+with one sender and 9 with several senders (relay contracts); the 2 it misses are
+one equivalent mutant and one wrong event (`docs/mutation.md`). Small evidence,
+honestly reported.
 
 ## Documentation and demo
 
@@ -177,6 +178,20 @@ fn vault_keeps_its_promise() uses (evm: mut Evm) {
 }
 ```
 
+Several senders: deploy a cast of relay contracts and use the `_cast` entry
+points; each call is then made by the test account or a relay, chosen from the
+seed, and the target sees a different `msg.sender`:
+
+```fe
+let cast = Cast::deploy(2)   // two relays; at most 3
+let _ = check_cast<MyVault>(Config { seed: 1, steps: 60, gas: 400000 }, 25, cast)
+```
+
+A multi-sender harness overrides `snapshot_with`, `check_step_with` and
+`aim_with` to see the cast's addresses (`Cast::account(i, root)`), and the
+generators `Sender` / `Holder` name the acting sender and the cast's accounts.
+Failing steps carry `who` (0 the test account, `1..` the relays).
+
 A failing `check` reverts with `Failure` (seed, invariant, shrunk calls); decode
 it with `fe test --show-logs | node scripts/fissure-report.mjs`. Rules for a
 harness: give the test a large `balance` (Fissure checks); read only the
@@ -196,8 +211,9 @@ balance +/- 1, max) and `Pay` (value to attach).
 | `src/shrink.fe` | the shrinker: cut after failure, drop chunks, simplify words |
 | `src/hunt.fe` | many seeds, shrink the first failure, events and `Failure` error, `check` |
 | `src/vault_ok.fe`, `src/vault_bug.fe` | the demo contracts |
+| `src/relay.fe`, `src/cast.fe` | several senders: a stateless relay contract and the `Cast` of up to 3 of them |
 | `src/third_party/coolcoin.fe` | the Fe Guide's ERC-20, **third-party, unmodified logic** |
-| `src/third_party/coolcoin/` | our harness, invariants, 11 mutants and tests for it |
+| `src/third_party/coolcoin/` | our harnesses (single- and multi-sender), invariants, 11 mutants and tests for them |
 | `src/*_tests.fe` | unit tests, demo tests, audit regressions |
 | `scripts/fissure-report.mjs` | Node: decodes events and errors from `fe test` output (docs tooling only) |
 
@@ -222,9 +238,11 @@ needed; the library has no dependencies.
 - Static argument types only; at most three generated argument words per call.
   Dynamic types (`bytes`, `string`, arrays) get only a zero head word, so they
   are not generated meaningfully (not yet tried on a contract that takes one).
-- One sender at a fixed timestamp: `fe test` has no caller or time cheat codes,
-  so bugs that need time to pass or several actors are out of reach (relay
-  contracts could add senders: `docs/multi-sender-spike.md`, not built). The demo
+- No time travel: `fe test` has no time cheat code, so bugs that need time to
+  pass are out of reach. Several senders are possible with relay contracts
+  (`Cast::deploy`, `hunt_cast`; at most 3 relays), but a relay is a contract, so
+  a target that rejects contract callers cannot be tested that way, and a relayed
+  call costs about 1.65x the gas of a direct one (`docs/audit.md`, round 3). The demo
   vault uses a zero lock period for this reason.
 - You list the messages yourself; `msg` blocks cannot be enumerated.
 - Shrinking is greedy: results are locally minimal, not proven globally minimal.
