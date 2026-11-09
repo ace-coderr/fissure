@@ -1,0 +1,238 @@
+//! MUTANTS of the CoolCoin ERC-20, for testing Fissure itself.
+//!
+//! DERIVATIVE OF THIRD-PARTY CODE: this is a copy of the Fe Guide's CoolCoin
+//! (the file next door, `../coolcoin.fe`) with one seeded bug per mutant id,
+//! switched on by the `mutant` constructor argument. Mutant 0 is the unmodified
+//! behaviour (a control). Every `if self.mutant == N` / `!= N` below is the
+//! whole difference for mutant N; see docs/mutation.md for the list.
+//!
+//! The messages, events and `AccessControl` are the original's, reused.
+
+use ingot::runner::Harness
+use super::harness::{Deploy, INITIAL_SUPPLY}
+use super::{AccessControl, Approval, Erc20, Erc20Extended, MINTER, Transfer}
+
+pub contract MutCoin uses (ctx: mut Ctx, log: mut Log) {
+    mut store: MutStore,
+    mut auth: AccessControl,
+
+    init(initial_supply: u256, owner: Address, mutant: u256)
+    uses (mut store, mut auth, mut ctx, mut log)
+    {
+        store.mutant = mutant
+        auth.grant(role: MINTER, to: owner)
+
+        if initial_supply > 0 {
+            store.mint(to: owner, amount: initial_supply)
+        }
+    }
+
+    recv Erc20 {
+        Transfer { to, amount } -> bool uses (ctx, mut store, mut log) {
+            store.transfer(from: ctx.caller(), to, amount)
+            true
+        }
+
+        Approve { spender, amount } -> bool uses (ctx, mut store, mut log) {
+            store.approve(owner: ctx.caller(), spender, amount)
+            true
+        }
+
+        TransferFrom { from, to, amount } -> bool
+        uses (ctx, mut store, mut log)
+        {
+            // Mutant 9: checks the allowance of the wrong party (`from` as spender).
+            var spender = ctx.caller()
+            if store.mutant == 9 {
+                spender = from
+            }
+            store.spend_allowance(owner: from, spender, amount)
+            store.transfer(from, to, amount)
+            true
+        }
+
+        BalanceOf { account } -> u256 uses store {
+            store.balances.get(key: account)
+        }
+
+        Allowance { owner, spender } -> u256 uses (store) {
+            store.allowances.get(key: (owner, spender))
+        }
+
+        TotalSupply {} -> u256 uses store {
+            store.total_supply
+        }
+
+        Name {} -> String<31> {
+            "CoolCoin"
+        }
+        Symbol {} -> String<8> {
+            "COOL"
+        }
+        Decimals {} -> u8 {
+            18
+        }
+    }
+
+    recv Erc20Extended {
+        Mint { to, amount } -> bool uses (ctx, mut store, mut log, auth) {
+            // Mutant 10: anyone may mint.
+            if store.mutant != 10 {
+                auth.require(role: MINTER)
+            }
+            store.mint(to, amount)
+            true
+        }
+
+        Burn { amount } -> bool uses (ctx, mut store, mut log) {
+            store.burn(from: ctx.caller(), amount)
+            true
+        }
+
+        BurnFrom { from, amount } -> bool uses (ctx, mut store, mut log) {
+            store.spend_allowance(owner: from, spender: ctx.caller(), amount)
+            store.burn(from, amount)
+            true
+        }
+
+        IncreaseAllowance { spender, added_value } -> bool
+        uses (ctx, mut store, mut log)
+        {
+            let owner = ctx.caller()
+            let current = store.allowances.get(key: (owner, spender))
+            store.approve(owner, spender, amount: current + added_value)
+            true
+        }
+
+        DecreaseAllowance { spender, subtracted_value } -> bool
+        uses (ctx, mut store, mut log)
+        {
+            let owner = ctx.caller()
+            let current = store.allowances.get(key: (owner, spender))
+            assert!(
+                current >= subtracted_value,
+                "decreased allowance below zero",
+            )
+            store.approve(owner, spender, amount: current - subtracted_value)
+            true
+        }
+    }
+}
+
+struct MutStore {
+    mutant: u256,
+    total_supply: u256,
+    balances: StorageMap<Address, u256>,
+    allowances: StorageMap<(Address, Address), u256>,
+}
+
+impl MutStore {
+    fn transfer(mut self, from: Address, to: Address, amount: u256)
+    uses (log: mut Log)
+    {
+        assert!(from != Address::zero(), "transfer from zero address")
+        assert!(to != Address::zero(), "transfer to zero address")
+
+        let from_balance = self.balances.get(key: from)
+        let to_balance_before = self.balances.get(key: to)
+        // Mutant 3: the balance check is missing (checked arithmetic below still
+        // reverts, so this one should behave identically).
+        if self.mutant != 3 {
+            assert!(from_balance >= amount, "transfer amount exceeds balance")
+        }
+
+        // Mutant 11: moving the whole balance credits one token too few.
+        var credit = amount
+        if self.mutant == 11 && amount == from_balance && amount > 0 {
+            credit = amount - 1
+        }
+
+        if self.mutant == 8 {
+            // Mutant 8: the recipient's balance is read before the debit, so a
+            // self-transfer credits on top of the old balance.
+            self.balances.set(key: from, value: from_balance - amount)
+            self.balances.set(key: to, value: to_balance_before + credit)
+        } else {
+            // Mutant 1: the sender is never debited.
+            if self.mutant != 1 {
+                self.balances.set(key: from, value: from_balance - amount)
+            }
+            self.balances.set(key: to, value: self.balances.get(key: to) + credit)
+        }
+
+        // Mutant 4: the event reports the wrong amount.
+        var shown = amount
+        if self.mutant == 4 {
+            shown = amount + 1
+        }
+        log.emit(event: Transfer { from, to, value: shown })
+    }
+
+    fn mint(mut self, to: Address, amount: u256) uses (log: mut Log) {
+        // Mutant 7: minting to the zero address is allowed.
+        if self.mutant != 7 {
+            assert!(to != Address::zero(), "mint to zero address")
+        }
+
+        self.total_supply += amount
+        self.balances.set(key: to, value: self.balances.get(key: to) + amount)
+
+        log.emit(
+            event: Transfer { from: Address::zero(), to, value: amount },
+        )
+    }
+
+    fn burn(mut self, from: Address, amount: u256) uses (log: mut Log) {
+        assert!(from != Address::zero(), "burn from zero address")
+
+        let from_balance = self.balances.get(key: from)
+        assert!(from_balance >= amount, "burn amount exceeds balance")
+
+        self.balances.set(key: from, value: from_balance - amount)
+        // Mutant 6: the total supply is not reduced.
+        if self.mutant != 6 {
+            self.total_supply -= amount
+        }
+
+        log.emit(
+            event: Transfer { from, to: Address::zero(), value: amount },
+        )
+    }
+
+    fn approve(mut self, owner: Address, spender: Address, amount: u256)
+    uses (log: mut Log)
+    {
+        assert!(owner != Address::zero(), "approve from zero address")
+        assert!(spender != Address::zero(), "approve to zero address")
+
+        // Mutant 5: approve adds to the existing allowance instead of replacing it.
+        var value = amount
+        if self.mutant == 5 {
+            value = self.allowances.get(key: (owner, spender)) + amount
+        }
+        self.allowances.set(key: (owner, spender), value)
+
+        log.emit(event: Approval { owner, spender, value })
+    }
+
+    fn spend_allowance(mut self, owner: Address, spender: Address, amount: u256) {
+        let current = self.allowances.get(key: (owner, spender))
+        assert!(current >= amount, "insufficient allowance")
+        // Mutant 2: spending exactly the whole allowance leaves it unchanged.
+        if !(self.mutant == 2 && current == amount) {
+            self.allowances.set(key: (owner, spender), value: current - amount)
+        }
+    }
+}
+
+/// Deploys mutant `ID` (0 is the control: no bug).
+pub struct Mutant<const ID: usize> {}
+
+impl<const ID: usize> Deploy for Mutant<ID> {
+    fn deploy() -> Address uses (evm: mut Evm) {
+        evm.create<MutCoin>(
+            value: Wei::zero(),
+            args: (INITIAL_SUPPLY, evm.address(), ID as u256),
+        )
+    }
+}

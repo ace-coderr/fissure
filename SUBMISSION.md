@@ -26,10 +26,13 @@ fe --version            # fe 26.5.0 (3dab95f)
 # 2. Clone, check, test, build
 git clone https://github.com/ace-coderr/fissure && cd fissure
 fe fmt --check
-fe test                 # 51 tests pass
+fe test                 # all tests pass, including the demo
 fe build
 
-# 3. The demo (needs Node 18+): Fissure finds and shrinks the seeded bug
+# 3. The demo is a test that asserts Fissure finds and shrinks the seeded bug
+fe test -f demo_ --show-logs
+
+# 4. Optional: decode the raw events into text (needs Node 18+)
 npm run demo
 ```
 

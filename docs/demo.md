@@ -1,16 +1,20 @@
 # Demo
 
-One command, no deployment, nothing leaves your machine (Fe 26.5.0 and Node 18+
-are the only requirements):
+Primary path, with only Fe installed and nothing leaving your machine:
 
 ```sh
-npm run demo
+fe test -f demo_ --show-logs
 ```
 
-It builds the contracts, runs the Fe test `demo_vault_bug_is_found_and_shrunk`
-(`src/demo_tests.fe`) with `--show-logs`, and pipes the output through
-`scripts/fissure-report.mjs`, which decodes the events and exits non-zero if no
-failure was found. Output:
+`demo_vault_bug_is_found_and_shrunk` (`src/demo_tests.fe`) asserts that Fissure
+finds the seeded bug, that the failing run shrinks to exactly two 1-wei
+`deposit()` calls, and that the shrunk calls still fail on replay. The test
+passes only if all of that holds. `--show-logs` additionally prints the report as
+raw event data.
+
+Optional, with Node 18+: `npm run demo` builds, runs the same test and decodes
+the events with `scripts/fissure-report.mjs` (non-zero exit if nothing was
+found). Output:
 
 ```
 demo_vault_bug_is_found_and_shrunk: FISSURE FOUND A FAILURE

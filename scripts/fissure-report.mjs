@@ -77,6 +77,7 @@ const h = (n) => "0x" + n.toString(16);
 const EVENTS = {
   [keccak256("Found(uint256,uint256,uint256,uint256,uint256)")]: "Found",
   [keccak256("ShrunkStep(uint256,uint256,uint256,uint256,uint256,uint256,uint256)")]: "ShrunkStep",
+  [keccak256("MutantResult(uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256)")]: "MutantResult",
 };
 const ERRORS = {
   [keccak256("Failure(uint256,uint256,uint256,uint256[])").slice(0, 8)]: "Failure",
@@ -120,6 +121,7 @@ function printSequence(seed, invariant, originalLen, steps, extra = "") {
 const text = readFileSync(0, "utf8").replace(/^﻿/, "");
 let test = null;
 const found = {};
+const mutants = [];
 let any = false;
 for (const line of text.split(/\r?\n/)) {
   const t = line.match(/^\s*(PASS|FAIL)\s+\[[^\]]+\]\s+(\S+)/);
@@ -131,7 +133,9 @@ for (const line of text.split(/\r?\n/)) {
   if (log && test) {
     const name = EVENTS[log[1].slice(2)];
     const w = words(log[2]);
-    if (name === "Found") {
+    if (name === "MutantResult") {
+      mutants.push({ test, id: w[0], found: w[1] === 1n, seed: w[2], invariant: w[3], originalLen: w[4], shrunkLen: w[5], attempts: w[6], accepted: w[7] });
+    } else if (name === "Found") {
       found[test] = { seed: w[0], invariant: w[1], originalLen: w[2], shrunkLen: w[3], attempts: w[4], steps: [] };
     } else if (name === "ShrunkStep" && found[test]) {
       found[test].steps.push({ variant: w[1], selector: w[2], value: w[3], w0: w[4], w1: w[5], w2: w[6] });
@@ -180,6 +184,17 @@ for (const [name, f] of Object.entries(found)) {
   any = true;
   console.log(`\n${name}: FISSURE FOUND A FAILURE`);
   printSequence(f.seed, f.invariant, f.originalLen, f.steps, ` in ${f.attempts} replays`);
+}
+if (mutants.length > 0) {
+  any = true;
+  console.log("");
+  console.log("MUTATION RESULTS");
+  console.log("  mutant  verdict  invariant  seed (decimal, truncated)  calls->shrunk  replays  accepted calls");
+  for (const m of mutants.sort((a, b) => Number(a.id - b.id))) {
+    const seed = m.found ? m.seed.toString().slice(0, 12) + "..." : "-";
+    const lens = m.found ? `${m.originalLen}->${m.shrunkLen}` : "-";
+    console.log(`  ${String(m.id).padStart(6)}  ${(m.found ? "CAUGHT" : m.id === 0n ? "clean" : "missed").padEnd(7)}  ${String(m.found ? m.invariant : "-").padStart(9)}  ${seed.padEnd(26)}  ${lens.padEnd(13)}  ${String(m.found ? m.attempts : "-").padStart(7)}  ${m.accepted}`);
+  }
 }
 if (!any) {
   console.log("No Fissure failures in this output.");

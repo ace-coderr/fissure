@@ -8,7 +8,8 @@
 //! same invariant still breaks, so the result always fails.
 
 use core::ptr::MemVec
-use ingot::menu::Step
+use ingot::gen::Env
+use ingot::menu::{Menu, Step}
 use ingot::runner::{Harness, Run, replay}
 
 /// Replays use salts from here up, clear of the salts used by fuzz runs.
@@ -94,6 +95,7 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
         return Shrunk { steps: copy_of(run.steps), invariant: 0, reproduced: false, attempts: 0 }
     }
     let inv = run.broken
+    let world = Env { target_balance: 0, sender: evm.address().word() }
 
     if !still_fails<H>(steps, inv, gas, mut attempts) {
         return Shrunk { steps: copy_of(run.steps), invariant: inv, reproduced: false, attempts }
@@ -142,12 +144,12 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
                     tries = tries + 1
                     let cur = field(steps[i], k)
                     if cur != 0 {
-                        // Candidates, simplest first: 0, 1, half.
+                        // Candidates from the generator, simplest first. They
+                        // stay inside what the generator can produce.
                         var c: u256 = 0
                         while c < 3 && !progress {
-                            var v: u256 = 0
-                            if c == 1 { v = 1 } else if c == 2 { v = cur / 2 }
-                            if v < cur {
+                            let v = H::Calls::simpler_at(steps[i].variant, world, k, cur, c)
+                            if v != cur {
                                 var cand = copy_of(steps)
                                 cand.set(i, with_field(steps[i], k, v))
                                 if still_fails<H>(cand, inv, gas, mut attempts) {

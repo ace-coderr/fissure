@@ -23,6 +23,20 @@ pub trait Generator {
     const MAX_VALUE: u256 = 0
 
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256
+
+    /// A simpler value than `v`, for shrinking, or `v` itself when there is
+    /// none. `attempt` is 0, 1, 2: three different ideas, simplest first. It
+    /// MUST stay inside what `generate` can produce: a shrunk call that names
+    /// a value the generator never makes can fail for a different reason than
+    /// the original. Repeatedly taking simpler values must terminate.
+    fn simpler(_ env: Env, _ v: u256, _ attempt: u256) -> u256 {
+        if attempt == 0 { return 0 }
+        if attempt == 1 {
+            if v > 1 { return 1 }
+            return v
+        }
+        v / 2
+    }
 }
 
 /// Always zero. Fills argument slots a call does not use.
@@ -53,6 +67,10 @@ impl Generator for Sender {
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
         env.sender
     }
+
+    fn simpler(_ env: Env, _ v: u256, _ attempt: u256) -> u256 {
+        v
+    }
 }
 
 /// Any account a call may reasonably name: the sender (half the time), one of
@@ -68,6 +86,19 @@ impl Generator for Holder {
             return env.sender
         }
         0x1000 + rng.below(4)
+    }
+
+    /// Actor -> sender -> zero address; and a lower-numbered actor.
+    fn simpler(_ env: Env, _ v: u256, _ attempt: u256) -> u256 {
+        let is_actor = v >= 0x1000 && v <= 0x1003
+        if attempt == 0 { return 0 }
+        if attempt == 1 && is_actor {
+            return env.sender
+        }
+        if attempt == 2 && is_actor && v > 0x1000 {
+            return 0x1000
+        }
+        v
     }
 }
 
@@ -87,6 +118,17 @@ pub struct Actor {}
 impl Generator for Actor {
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
         0x1000 + rng.below(4)
+    }
+
+    /// Toward the lowest actor, never outside the actor range.
+    fn simpler(_ env: Env, _ v: u256, _ attempt: u256) -> u256 {
+        if attempt == 0 && v > 0x1000 {
+            return 0x1000
+        }
+        if attempt == 1 && v > 0x1001 {
+            return v - 1
+        }
+        v
     }
 }
 

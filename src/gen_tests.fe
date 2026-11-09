@@ -142,3 +142,60 @@ fn sender_and_holder() {
     }
     assert!(saw_zero && saw_sender && saw_actor)
 }
+
+fn in_holder_domain(_ v: u256) -> bool {
+    v == 0 || v == 0x77 || (v >= 0x1000 && v <= 0x1003)
+}
+
+/// Shrinking must never leave what the generator can produce.
+#[test]
+fn simpler_values_stay_inside_the_generators_domain() {
+    let domain = [0, 0x77, 0x1000, 0x1001, 0x1002, 0x1003]
+    var i: usize = 0
+    while i < 6 {
+        var a: u256 = 0
+        while a < 3 {
+            assert!(in_holder_domain(Holder::simpler(env(), domain[i], a)))
+            assert!(Sender::simpler(env(), 0x77, a) == 0x77)
+            a = a + 1
+        }
+        i = i + 1
+    }
+}
+
+/// Repeatedly taking the first different simpler value reaches a fixed point.
+#[test]
+fn simplifying_terminates() {
+    var v: u256 = 0x1003
+    var steps: u256 = 0
+    var moved = true
+    while moved && steps < 20 {
+        moved = false
+        var a: u256 = 0
+        while a < 3 && !moved {
+            let n = Holder::simpler(env(), v, a)
+            if n != v {
+                v = n
+                moved = true
+            }
+            a = a + 1
+        }
+        steps = steps + 1
+    }
+    assert!(!moved)
+    assert!(v == 0)
+}
+
+#[test]
+fn actor_simplifies_only_to_actors() {
+    var k: u256 = 0
+    while k < 4 {
+        var a: u256 = 0
+        while a < 3 {
+            let n = Actor::simpler(env(), 0x1000 + k, a)
+            assert!(n >= 0x1000 && n <= 0x1003 && n <= 0x1000 + k)
+            a = a + 1
+        }
+        k = k + 1
+    }
+}

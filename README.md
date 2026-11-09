@@ -102,11 +102,22 @@ contract's own guards (`docs/revert-rate.md`).
 
 ## Documentation and demo
 
-One command, no deployment:
+The primary way to reproduce everything is `fe test`. No deployment, no network,
+no Node:
 
 ```sh
-npm run demo
+fe test                 # every test, including the demo, must pass
+fe test -f demo_ --show-logs   # the demo, with the raw events it emits
 ```
+
+The demo test `demo_vault_bug_is_found_and_shrunk` (`src/demo_tests.fe`) runs
+Fissure against `vault_bug` and **asserts** what it finds: the invariant breaks,
+the failing run is shrunk to exactly two `deposit()` calls, each sending exactly
+1 wei, and the shrunk sequence still fails when replayed. It passes only if
+Fissure finds the seeded bug. `demo_vault_ok_finds_nothing` is its counterpart
+on the correct vault. `--show-logs` prints the report as raw event data (hex).
+
+Optional: a Node script decodes that data into text (`npm run demo`, Node 18+):
 
 ```
 demo_vault_bug_is_found_and_shrunk: FISSURE FOUND A FAILURE
@@ -118,7 +129,9 @@ demo_vault_bug_is_found_and_shrunk: FISSURE FOUND A FAILURE
 
 Also in `docs/`: [demo.md](docs/demo.md), [spike.md](docs/spike.md) (the design
 question and the answer), [revert-rate.md](docs/revert-rate.md),
-[audit.md](docs/audit.md), [compiler-notes.md](docs/compiler-notes.md).
+[mutation.md](docs/mutation.md) (Fissure against a real ERC-20 and 11 mutants),
+[audit.md](docs/audit.md), [multi-sender-spike.md](docs/multi-sender-spike.md),
+[compiler-notes.md](docs/compiler-notes.md).
 
 ### Using it
 
@@ -185,7 +198,7 @@ fe --version   # fe 26.5.0 (3dab95f)
 fe fmt --check
 fe test
 fe build
-npm run demo   # needs Node 18+ as well
+npm run demo   # optional: decodes the demo's events; needs Node 18+
 ```
 
 Exact Fe version: **26.5.0** (`3dab95f`), pinned in `.github/workflows/ci.yml`.

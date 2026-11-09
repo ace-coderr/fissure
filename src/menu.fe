@@ -36,6 +36,8 @@ pub trait Entry {
 
     fn draw<R: Draw>(_ env: Env, _ rng: mut R) -> Step
     fn selector() -> u256
+    /// Shrinking: a simpler word for `slot` (0 value, 1..=3 argument words).
+    fn simpler(_ env: Env, _ slot: u256, _ v: u256, _ attempt: u256) -> u256
     fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
     uses (evm: mut Evm)
 }
@@ -54,6 +56,19 @@ where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Genera
 
     fn selector() -> u256 {
         <M as MsgVariant<Sol>>::SELECTOR as u256
+    }
+
+    fn simpler(_ env: Env, _ slot: u256, _ v: u256, _ attempt: u256) -> u256 {
+        if slot == 0 {
+            return V::simpler(env, v, attempt)
+        }
+        if slot == 1 {
+            return A0::simpler(env, v, attempt)
+        }
+        if slot == 2 {
+            return A1::simpler(env, v, attempt)
+        }
+        A2::simpler(env, v, attempt)
     }
 
     fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
@@ -92,6 +107,7 @@ pub trait Menu {
     const MAX_VALUE: u256
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step
     fn selector_at(_ i: u256) -> u256
+    fn simpler_at(_ i: u256, _ env: Env, _ slot: u256, _ v: u256, _ attempt: u256) -> u256
     fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
     uses (evm: mut Evm)
 }
@@ -106,6 +122,10 @@ impl Menu for Nil {
 
     fn selector_at(_ i: u256) -> u256 {
         0
+    }
+
+    fn simpler_at(_ i: u256, _ env: Env, _ slot: u256, _ v: u256, _ attempt: u256) -> u256 {
+        v
     }
 
     fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
@@ -139,6 +159,13 @@ impl<H, T> Menu for Cons<H, T> where H: Entry, T: Menu {
             return H::selector()
         }
         T::selector_at(i - 1)
+    }
+
+    fn simpler_at(_ i: u256, _ env: Env, _ slot: u256, _ v: u256, _ attempt: u256) -> u256 {
+        if i == 0 {
+            return H::simpler(env, slot, v, attempt)
+        }
+        T::simpler_at(i - 1, env, slot, v, attempt)
     }
 
     fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool

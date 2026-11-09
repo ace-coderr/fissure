@@ -150,7 +150,9 @@ fn shrinks_to_the_two_call_minimum() uses (evm: mut Evm) {
     let first = h.shrunk.steps[0]
     let second = h.shrunk.steps[1]
     assert!(first.variant == 0 && first.value == 1)
-    assert!(second.variant == 1 && second.w0 == 0 && second.value == 0)
+    assert!(
+        second.variant == 1 && second.w0 == 0x1000 && second.value == 0,
+    )
 }
 
 #[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]

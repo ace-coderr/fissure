@@ -1,0 +1,121 @@
+//! Mutation test: does Fissure catch bugs seeded into the CoolCoin ERC-20?
+//!
+//! Each test hunts one mutant and emits a `MutantResult` event (`--show-logs`),
+//! then asserts the expected outcome so CI notices if a verdict changes. The
+//! table in docs/mutation.md is produced from these events.
+
+use ingot::hunt::{Hunt, emit_hunt, hunt}
+use ingot::runner::Config
+use super::harness::Erc20Suite
+use super::mutant::Mutant
+
+#[event]
+struct MutantResult {
+    id: u256,
+    found: bool,
+    seed: u256,
+    invariant: u256,
+    original_len: u256,
+    shrunk_len: u256,
+    attempts: u256,
+    accepted: u256,
+}
+
+fn config() -> Config {
+    Config { seed: 4242, steps: 60, gas: 400000 }
+}
+
+fn probe<const ID: usize>() -> Hunt uses (evm: mut Evm) {
+    let h = hunt<Erc20Suite<Mutant<ID>>>(config(), 12)
+    evm.emit(
+        MutantResult {
+            id: ID as u256,
+            found: h.found,
+            seed: h.seed,
+            invariant: h.shrunk.invariant,
+            original_len: h.original_len,
+            shrunk_len: h.shrunk.steps.len() as u256,
+            attempts: h.shrunk.attempts,
+            accepted: h.accepted,
+        },
+    )
+    emit_hunt<Erc20Suite<Mutant<ID>>>(h)
+    h
+}
+
+#[test]
+fn mutant_0_control_is_clean() uses (evm: mut Evm) {
+    let h = probe<0>()
+    assert!(!h.found)
+    assert!(h.accepted > 100)
+}
+
+#[test]
+fn mutant_1_transfer_does_not_debit() uses (evm: mut Evm) {
+    let h = probe<1>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn mutant_2_whole_allowance_not_spent() uses (evm: mut Evm) {
+    let h = probe<2>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn mutant_3_missing_balance_check() uses (evm: mut Evm) {
+    let h = probe<3>()
+    assert!(!h.found)
+}
+
+#[test]
+fn mutant_4_wrong_event_amount() uses (evm: mut Evm) {
+    let h = probe<4>()
+    assert!(!h.found)
+}
+
+#[test]
+fn mutant_5_approve_adds() uses (evm: mut Evm) {
+    let h = probe<5>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn mutant_6_burn_keeps_supply() uses (evm: mut Evm) {
+    let h = probe<6>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn mutant_7_mint_to_zero_address() uses (evm: mut Evm) {
+    let h = probe<7>()
+    assert!(h.found && h.shrunk.reproduced)
+}
+
+#[test]
+fn mutant_8_self_transfer_mints() uses (evm: mut Evm) {
+    let h = probe<8>()
+    assert!(h.found && h.shrunk.reproduced)
+    // The shrunk call must still be a self-transfer: the shrinker may not drift
+    // to a different failure (a call outside the generators' domain).
+    let last = h.shrunk.steps[h.shrunk.steps.len() - 1]
+    assert!(last.variant == 2 && last.w0 == last.w1)
+}
+
+#[test]
+fn mutant_9_wrong_spender() uses (evm: mut Evm) {
+    let h = probe<9>()
+    assert!(!h.found)
+}
+
+#[test]
+fn mutant_10_mint_without_access_control() uses (evm: mut Evm) {
+    let h = probe<10>()
+    assert!(!h.found)
+}
+
+#[test]
+fn mutant_11_full_balance_transfer_short() uses (evm: mut Evm) {
+    let h = probe<11>()
+    assert!(h.found && h.shrunk.reproduced)
+}
