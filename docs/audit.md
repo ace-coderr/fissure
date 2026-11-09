@@ -97,7 +97,7 @@ fail, the original sequence is returned with `reproduced = false`.
 
 ---
 
-# Round 2 (step 7: a real contract and mutants)
+# Round 2 (step 7: a third-party contract and mutants)
 
 Done after running Fissure on the CoolCoin ERC-20 and 11 seeded mutants
 (`docs/mutation.md`). Regression tests: `src/gen_tests.fe` (domains),
@@ -133,7 +133,7 @@ script). Measured: one run of 20000 vault calls or 3000 ERC-20 calls fits;
 4000 ERC-20 calls spread over a hunt did not. The mutation results hold at the
 default optimisation level (CI); at `-O 0` mutant 11 reports `OutOfBudget`.
 
-## Harness mistakes found by running on a real contract (my invariants, not Fissure or CoolCoin)
+## Harness mistakes found by running on a third-party contract (my invariants, not Fissure or CoolCoin)
 
 A zero-amount `transferFrom` from a stranger is legal, and balances above 2^128
 are legal. Both were wrongly flagged by my first invariants; details in

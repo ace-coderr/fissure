@@ -38,7 +38,8 @@ npm run demo
 
 No deployment, accounts or network access are needed beyond downloading Fe.
 Expected demo output is in `docs/demo.md`; the seed and the shrunk two-call
-sequence are the same on every run.
+sequence were the same in every run I made, locally and in CI. `fe test` takes
+about a minute.
 
 ## Declaration
 

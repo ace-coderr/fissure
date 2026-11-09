@@ -42,7 +42,9 @@ can therefore build `selector ++ argument words` for any message:
 impl<M, V, A0, A1, A2> Entry for Call<M, V, A0, A1, A2>
 where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Generator
 {
-    fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool uses (evm: mut Evm) {
+    // excerpt: the direct-call path (`via` names a relay for multi-sender runs)
+    fn fire(_ target: Address, _ gas: u256, _ step: Step, _ via: u256) -> bool
+    uses (evm: mut Evm) {
         let size = <M as AbiSize>::HEAD_SIZE as usize
         var buf = MemBuffer::alloc(36 + size)
         let sel = <M as MsgVariant<Sol>>::SELECTOR
@@ -64,8 +66,11 @@ crashed test. `docs/spike.md` records how this was found and what else was tried
 ## Technical quality
 
 - **Deterministic.** All randomness comes from a seeded PRNG written in Fe
-  (`src/prng.fe`). The same seed gives the same calls: identical across repeated
-  runs, optimisation levels `-O 0`/default/`-O 2`, and between a local run and CI.
+  (`src/prng.fe`). The same seed gives the same calls. Checked: the vault demo is
+  identical across repeated runs and `-O 0` / default / `-O 2`; the ERC-20 results
+  (single- and multi-sender, mutants and held-out) are identical across repeated
+  runs and default / `-O 2` (at `-O 0` one hunt runs out of gas budget); and the
+  demo and ERC-20 output of CI equals a local run line for line (`docs/audit.md`).
 - **Explicit effects.** Anything touching the chain declares
   `uses (evm: mut Evm)`; randomness is a value threaded by `mut`, never ambient.
 - **Generic with bounds.** `Generator`, `Entry`, `Menu` and `Harness` are traits;
@@ -74,15 +79,17 @@ crashed test. `docs/spike.md` records how this was found and what else was tried
   replayed on a fresh deployment and must still break the same invariant.
 - **Guards against false confidence.** `check` refuses to pass if no call was
   accepted (`Vacuous`), if a menu entry was never accepted (`Unreached`), if the
-  menu is empty (`EmptyMenu`), or if the sender cannot afford the run
-  (`Underfunded`).
-- **Audited twice.** `docs/audit.md` lists what was tried to break it, the real
-  bugs found and fixed (seeds that did not reproduce; a shrinker that drifted to
-  a different failure), and what remains unfixed.
-- **Tried on a real contract and on mutants.** The Fe Guide's ERC-20 (third-party)
-  has 11 seeded bugs: 7 caught and shrunk to 1-2 calls with one sender, 9 of 11
-  with several senders, 2 missed for stated reasons (`docs/mutation.md`).
-- **96 Fe tests**, `fe fmt --check` clean, CI green.
+  menu is empty (`EmptyMenu`), if the sender cannot afford the run
+  (`Underfunded`), or if the test is running out of gas (`OutOfBudget`).
+- **Audited in three rounds.** `docs/audit.md` lists what was tried to break it,
+  the genuine bugs found and fixed (seeds that did not reproduce; a shrinker that
+  drifted to a different failure; budget exhaustion without a message), and what
+  remains unfixed.
+- **Tried on a third-party ERC-20 with seeded bugs.** The Fe Guide's ERC-20 has
+  11 mutants: 7 caught and shrunk to 1-2 calls with one sender, 9 of 11 with
+  several senders, 2 missed for stated reasons; plus 6 held-out mutants
+  (`docs/mutation.md`, and the honesty section below).
+- **114 Fe tests**, `fe fmt --check` clean, CI green.
 
 ## Originality
 
@@ -102,8 +109,8 @@ the shape of bug it targets: a vault that is correct on every path except a
 and reduces the failing run to the two calls that matter. A measured example of
 why typed generators matter: on the correct vault, plain small-integer arguments
 revert 67.2% of calls; typed generators revert 13.0%, and the rest are the
-contract's own guards (`docs/revert-rate.md`). On a real ERC-20 (the Fe Guide's
-CoolCoin, third-party) Fissure found nothing in the unmodified contract (after
+contract's own guards (`docs/revert-rate.md`). On an ERC-20 (the Fe Guide's
+CoolCoin, third-party and a small teaching contract) Fissure found nothing in the unmodified contract (after
 I fixed two mistakes in my own invariants), and with 11 seeded bugs it caught 7
 with one sender and 9 with several senders (relay contracts); the 2 it misses are
 one equivalent mutant and one wrong event. On 6 further mutants written after the
@@ -139,7 +146,7 @@ demo_vault_bug_is_found_and_shrunk: FISSURE FOUND A FAILURE
 
 Also in `docs/`: [demo.md](docs/demo.md), [spike.md](docs/spike.md) (the design
 question and the answer), [revert-rate.md](docs/revert-rate.md),
-[mutation.md](docs/mutation.md) (Fissure against a real ERC-20 and 11 mutants),
+[mutation.md](docs/mutation.md) (Fissure against the Fe Guide's ERC-20: 11 mutants, then 6 held-out ones),
 [audit.md](docs/audit.md), [multi-sender-spike.md](docs/multi-sender-spike.md),
 [compiler-notes.md](docs/compiler-notes.md).
 
@@ -195,11 +202,13 @@ Failing steps carry `who` (0 the test account, `1..` the relays).
 
 A failing `check` reverts with `Failure` (seed, invariant, shrunk calls); decode
 it with `fe test --show-logs | node scripts/fissure-report.mjs`. Rules for a
-harness: give the test a large `balance` (Fissure checks); read only the
+harness: if the menu attaches ether (`Pay`), give the test a large `balance` (Fissure
+checks); read only the
 target's own state in `check`; prefer `evm.create` over `create2` (a repeated
-salt collides). Generators: `Zero`, `SmallWord`, `Flag`, `Actor`,
-`UpTo<MAX>`, `Amount` (aims at the target's current balance: 0, 1, balance,
-balance +/- 1, max) and `Pay` (value to attach).
+salt collides). Generators: `Zero`, `SmallWord`, `Flag`, `Actor`, `Sender`,
+`Holder`, `UpTo<MAX>`, `Amount` (aims at the target's current balance: 0, 1,
+balance, balance +/- 1, max) and `Pay` (value to attach); you can write your own
+(`Generator`).
 
 ## Architecture
 
@@ -230,14 +239,15 @@ npm run demo   # optional: decodes the demo's events; needs Node 18+
 
 Exact Fe version: **26.5.0** (`3dab95f`), pinned in `.github/workflows/ci.yml`.
 Install: `curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.5.0`.
-There is no Windows build of Fe 26.5.0; development was on Windows through WSL
-(Ubuntu), CI runs on `ubuntu-latest`. Only Fe and (for the demo script) Node are
+A Windows binary exists among the v26.5.0 release assets, but I did not use or
+test it: development was on Windows through WSL (Ubuntu), and CI runs on
+`ubuntu-latest`. Whether this repository works with the Windows binary is untested. Only Fe and (for the demo script) Node are
 needed; the library has no dependencies.
 
 ## Honesty: what the evidence does and does not show
 
-- **The mutation results are small and author-made.** The target is a 300-line
-  teaching ERC-20 from the Fe Guide (third-party, unaudited by its own words).
+- **The mutation results are small and author-made.** The target is a 368-line
+  file (the contract plus its own three tests): a teaching ERC-20 from the Fe Guide (third-party, unaudited by its own words).
   The 11 mutants of step 7 and the 6 of step 9 were written by the same person who
   wrote the invariants, so they are of kinds the invariants were built around.
 - **The generators were tuned after I saw misses.** With relay senders and the
@@ -280,9 +290,9 @@ needed; the library has no dependencies.
   report in revert data (hex), decoded by the Node script; there it labels calls
   by menu index, not function name.
 - Invariants cannot see emitted events, so a wrong event is invisible to them.
-- A test has a fixed gas budget and Fe never frees memory: roughly 20000 vault
-  calls or 3000 ERC-20 calls fit in one run, fewer in a long hunt, and fewer at
-  `-O 0`. Fissure stops with `OutOfBudget` before running dry.
+- A test has a fixed gas budget and Fe never frees memory: 20000 vault calls
+  and 3000 ERC-20 calls each fit in one run (I did not test higher), fewer in a
+  long hunt, and fewer at `-O 0`. Fissure stops with `OutOfBudget` before running dry.
 - Seeds are reproducible in the same environment; for harnesses that name the
   sender (`Sender`, `Holder`) the generated words include the test account's
   address.
@@ -291,9 +301,9 @@ needed; the library has no dependencies.
 - The PRNG is chosen for determinism, not tested for statistical quality.
 - Only the default EVM test backend is supported (native tests cannot use
   balances or logs).
-- Tested on the two demo vaults, one third-party ERC-20 with 11 mutants, and unit
-  tests; not on a large real-world contract. The audit was done by the author with AI assistance and has had no
-  independent review.
+- Tested on the two demo vaults, one third-party ERC-20 with 17 mutants, and unit
+  tests; not on a large real-world contract. The audits were done by the author
+  with AI assistance and have had no independent review.
 
 ## Declaration
 

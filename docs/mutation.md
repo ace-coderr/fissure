@@ -1,4 +1,4 @@
-# Fissure on a real ERC-20: mutation testing
+# Fissure on the Fe Guide's ERC-20: mutation testing
 
 Target: the CoolCoin ERC-20 from The Fe Guide (`src/third_party/coolcoin.fe`,
 third-party code, unmodified). Harness: `src/third_party/coolcoin/harness.fe`.
