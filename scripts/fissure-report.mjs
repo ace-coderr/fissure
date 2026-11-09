@@ -83,6 +83,8 @@ const ERRORS = {
   [keccak256("Vacuous(uint256)").slice(0, 8)]: "Vacuous",
   [keccak256("EmptyMenu()").slice(0, 8)]: "EmptyMenu",
   [keccak256("InvariantBroken(uint256,uint256,uint256)").slice(0, 8)]: "InvariantBroken",
+  [keccak256("Underfunded(uint256,uint256)").slice(0, 8)]: "Underfunded",
+  [keccak256("Unreached(uint256)").slice(0, 8)]: "Unreached",
   "08c379a0": "Error",
 };
 
@@ -154,11 +156,20 @@ for (const line of text.split(/\r?\n/)) {
       printSequence(w[0], w[1], w[2], steps);
     } else if (name === "Vacuous") {
       any = true;
-      console.log(`\n${test}: VACUOUS - the callee rejected every call (${words(body)[0]} made); nothing was tested`);
+      console.log(`\n${test}: VACUOUS - no call was accepted (${words(body)[0]} made); nothing was tested`);
     } else if (name === "InvariantBroken") {
       const w = words(body);
       any = true;
       console.log(`\n${test}: invariant #${w[2]} broke at call ${w[1]} (seed ${w[0]})`);
+    } else if (name === "Underfunded") {
+      const w = words(body);
+      any = true;
+      console.log(`
+${test}: UNDERFUNDED - the sender holds ${w[0]} wei but needs ${w[1]}; raise the test's balance`);
+    } else if (name === "Unreached") {
+      any = true;
+      console.log(`
+${test}: UNREACHED - menu entry ${words(body)[0]} was never accepted by the contract; the invariants say nothing about it`);
     } else if (name === "EmptyMenu") {
       any = true;
       console.log(`\n${test}: EMPTY MENU - no calls to make`);

@@ -1,0 +1,143 @@
+//! Regression tests for the findings in docs/audit.md.
+
+use core::ptr::MemVec
+use ingot::demo_tests::{BugVault, OkVault}
+use ingot::gen::{Actor, Pay, Zero}
+use ingot::hunt::{check, hunt}
+use ingot::menu::{Call0, Call1, Cons, Nil, Step}
+use ingot::prng::Prng
+use ingot::runner::{Config, Harness, fuzz, replay}
+use ingot::vault_ok::{VaultMsg, VaultOk}
+use std::evm::days
+
+type LockedCalls = Cons<
+    Call0<VaultMsg::Deposit, Pay>,
+    Cons<Call1<VaultMsg::Withdraw, Zero, Actor>, Nil>,
+>
+
+/// A 7-day lock that tests cannot wait out: `withdraw` never succeeds.
+struct LockedVault {}
+
+impl Harness for LockedVault {
+    type Calls = LockedCalls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        evm.create<VaultOk>(value: Wei::zero(), args: (days(7),))
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+}
+
+fn same_steps(_ a: MemVec<Step>, _ b: MemVec<Step>) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    var i: usize = 0
+    while i < a.len() {
+        let x = a[i]
+        let y = b[i]
+        if x.variant != y.variant
+            || x.value != y.value
+            || x.w0 != y.w0
+            || x.w1 != y.w1
+            || x.w2 != y.w2 {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}
+
+/// Finding 1: a seed gives the same calls however much earlier runs spent.
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn seed_gives_the_same_calls_after_other_runs() uses (evm: mut Evm) {
+    let first = fuzz<OkVault>(Config { seed: 5, steps: 80, gas: 300000 }, 0)
+    var k: u256 = 0
+    while k < 6 {
+        let _ = fuzz<OkVault>(Config { seed: 1000 + k, steps: 80, gas: 300000 }, 0)
+        k = k + 1
+    }
+    let later = fuzz<OkVault>(Config { seed: 5, steps: 80, gas: 300000 }, 0)
+    assert!(same_steps(first.steps, later.steps))
+    assert!(first.accepted == later.accepted)
+}
+
+/// Finding 1 (guard): a sender that cannot afford the run is an error, never a
+/// silently different run.
+#[test(should_revert, balance = 20_000_000_000_000_000_000)]
+fn an_underfunded_sender_is_refused() uses (evm: mut Evm) {
+    let _ = fuzz<OkVault>(Config { seed: 5, steps: 80, gas: 300000 }, 0)
+}
+
+#[test(should_revert, balance = 20_000_000_000_000_000_000)]
+fn an_underfunded_replay_is_refused() uses (evm: mut Evm) {
+    let long = fuzz<OkVault>(Config { seed: 5, steps: 1, gas: 300000 }, 0)
+    var many = MemVec<Step>::new()
+    var i: usize = 0
+    while i < 100 {
+        many.push(long.steps[0])
+        i = i + 1
+    }
+    let _ = replay<OkVault>(many, 300000, 1)
+}
+
+/// Finding 3: a menu entry that never succeeds is reported, not ignored.
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn an_entry_that_is_never_accepted_is_visible() uses (evm: mut Evm) {
+    let h = hunt<LockedVault>(Config { seed: 4, steps: 40, gas: 300000 }, 10)
+    assert!(!h.found)
+    assert!(h.ok[0] > 0)
+    assert!(h.ok[1] == 0)
+}
+
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn check_refuses_a_menu_entry_that_never_runs() uses (evm: mut Evm) {
+    let _ = check<LockedVault>(Config { seed: 4, steps: 40, gas: 300000 }, 10)
+}
+
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn zero_runs_is_not_a_pass() uses (evm: mut Evm) {
+    let _ = check<OkVault>(Config { seed: 4, steps: 40, gas: 300000 }, 0)
+}
+
+/// Replaying a step that names a menu entry that does not exist must not panic.
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn replaying_an_out_of_range_entry_is_harmless() uses (evm: mut Evm) {
+    var steps = MemVec<Step>::new()
+    steps.push(Step { variant: 99, value: 0, w0: 0, w1: 0, w2: 0 })
+    assert!(replay<OkVault>(steps, 300000, 1) == 0)
+    assert!(replay<OkVault>(MemVec<Step>::new(), 300000, 2) == 0)
+}
+
+/// A long run completes within the test's resources.
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn a_thousand_calls_complete() uses (evm: mut Evm) {
+    let run = fuzz<OkVault>(Config { seed: 77, steps: 1000, gas: 300000 }, 0)
+    assert!(run.broken == 0)
+    assert!(run.executed == 1000)
+}
+
+/// Seeds derived for different runs of one hunt do not collide.
+#[test]
+fn derived_run_seeds_are_distinct() {
+    var i: u256 = 0
+    while i < 60 {
+        var j: u256 = i + 1
+        while j < 60 {
+            assert!(Prng::derive(2026, i) != Prng::derive(2026, j))
+            j = j + 1
+        }
+        i = i + 1
+    }
+}
+
+/// A failing invariant at the very first call is caught and shrunk to one call.
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn the_bug_is_found_with_a_different_seed_too() uses (evm: mut Evm) {
+    let h = hunt<BugVault>(Config { seed: 31337, steps: 80, gas: 300000 }, 50)
+    assert!(h.found)
+    assert!(h.shrunk.reproduced)
+    assert!(h.shrunk.steps.len() == 2)
+}

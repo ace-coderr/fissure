@@ -33,7 +33,7 @@ fn ok_conserved(_ target: Address) -> u256 uses (evm: mut Evm) {
     0
 }
 
-struct OkVault {}
+pub struct OkVault {}
 
 impl Harness for OkVault {
     type Calls = OkCalls
@@ -68,7 +68,7 @@ fn bug_conserved(_ target: Address) -> u256 uses (evm: mut Evm) {
     0
 }
 
-struct BugVault {}
+pub struct BugVault {}
 
 impl Harness for BugVault {
     type Calls = BugCalls

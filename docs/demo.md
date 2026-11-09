@@ -15,7 +15,7 @@ failure was found. Output:
 ```
 demo_vault_bug_is_found_and_shrunk: FISSURE FOUND A FAILURE
   seed 63943086030706054941702419180308291968568539214185280263325138216467852686274   broken invariant #1
-  4 calls shrunk to 2 in 18 replays
+  4 calls shrunk to 2 in 19 replays
     1. deposit()  value=1 wei   words=[0, 0, 0]
     2. deposit()  value=1 wei   words=[0, 0, 0]
 ```

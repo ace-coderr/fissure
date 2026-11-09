@@ -4,7 +4,8 @@
 use core::ptr::MemVec
 use ingot::menu::Step
 use ingot::prng::Prng
-use ingot::runner::{Config, Harness, fuzz}
+use ingot::menu::Menu
+use ingot::runner::{Config, Harness, fuzz, zeros}
 use ingot::shrink::{Shrunk, shrink}
 use std::abi::dyn_array::DynArray
 use std::evm::effects::revert_error
@@ -23,6 +24,8 @@ pub struct Hunt {
     pub accepted: u256,
     /// Calls made, over all runs.
     pub executed: u256,
+    /// Per menu entry: calls accepted, over all runs.
+    pub ok: MemVec<u256>,
 }
 
 /// Emitted by `emit_hunt`; readable with `fe test --show-logs` in a test that
@@ -63,21 +66,41 @@ pub struct Failure {
 #[error]
 pub struct Vacuous { pub executed: u256 }
 
+/// A menu entry that the callee never accepted in any run: its code was never
+/// reached, so the invariants say nothing about it.
+#[error]
+pub struct Unreached { pub entry: u256 }
+
 /// Run up to `runs` fuzz runs, with seeds derived from `cfg.seed`. The first
 /// run that breaks an invariant is shrunk.
 pub fn hunt<H: Harness>(_ cfg: Config, _ runs: u256) -> Hunt uses (evm: mut Evm) {
     var accepted: u256 = 0
     var executed: u256 = 0
+    var ok_by = zeros(H::Calls::LEN)
     var r: u256 = 0
     while r < runs {
         let seed = Prng::derive(cfg.seed, r)
         let run = fuzz<H>(Config { seed, steps: cfg.steps, gas: cfg.gas }, r)
         accepted = accepted + run.accepted
         executed = executed + run.executed
+        var e: usize = 0
+        while e < run.ok.len() {
+            ok_by.set(e, ok_by[e] + run.ok[e])
+            e = e + 1
+        }
         if run.broken != 0 {
             let original_len = run.steps.len() as u256
             let shrunk = shrink<H>(run, cfg.gas)
-            return Hunt { found: true, seed, original_len, shrunk, runs: r + 1, accepted, executed }
+            return Hunt {
+                found: true,
+                seed,
+                original_len,
+                shrunk,
+                runs: r + 1,
+                accepted,
+                executed,
+                ok: ok_by,
+            }
         }
         r = r + 1
     }
@@ -89,6 +112,7 @@ pub fn hunt<H: Harness>(_ cfg: Config, _ runs: u256) -> Hunt uses (evm: mut Evm)
         runs,
         accepted,
         executed,
+        ok: ok_by,
     }
 }
 
@@ -153,6 +177,13 @@ pub fn check<H: Harness>(_ cfg: Config, _ runs: u256) -> u256 uses (evm: mut Evm
     }
     if h.accepted == 0 {
         revert_error(Vacuous { executed: h.executed })
+    }
+    var e: usize = 0
+    while e < h.ok.len() {
+        if h.ok[e] == 0 {
+            revert_error(Unreached { entry: e as u256 })
+        }
+        e = e + 1
     }
     h.accepted
 }

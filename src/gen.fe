@@ -4,7 +4,8 @@
 //! word is shaped for the argument's type (an address, a bounded amount, a
 //! flag), so most generated calls pass the callee's own decoder and reach deep
 //! state. `Env` is the world the generator can aim at: the target's current
-//! balance and the caller's funds.
+//! balance. The sender's funds are deliberately absent: they change as runs spend
+//! them, which would make the same seed produce different calls.
 
 use ingot::prng::{Draw, WORD_MAX}
 
@@ -12,8 +13,6 @@ use ingot::prng::{Draw, WORD_MAX}
 pub struct Env {
     /// Native balance currently held by the contract under test.
     pub target_balance: u256,
-    /// Native balance of the account sending the calls.
-    pub funds: u256,
 }
 
 pub trait Generator {
@@ -98,25 +97,25 @@ impl Generator for Amount {
     }
 }
 
-/// Native value to attach to a call. Never more than the caller holds, and
-/// capped at 100 ether so repeated replays do not drain the test account.
+/// The most native value `Pay` ever attaches to one call: 10 ether.
+pub const MAX_CALL_VALUE: u256 = 10_000_000_000_000_000_000
+
+/// Native value to attach to a call: 0, 1 wei, 1 ether, 10 ether, or random up
+/// to 10 ether. It does not look at the sender's funds (see `Env`); the runner
+/// checks up front that the sender can afford the run.
 pub struct Pay {}
 
 impl Generator for Pay {
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
-        let cap = 100_000_000_000_000_000_000
-        var top = env.funds
-        if top > cap { top = cap }
         let pick = rng.below(6)
         if pick == 0 { return 0 }
-        if pick == 1 {
-            if top == 0 { return 0 }
-            return 1
+        if pick == 1 { return 1 }
+        if pick == 2 {
+            return 1_000_000_000_000_000_000
         }
-        if pick == 2 { return top }
         if pick == 3 {
-            return 1_000_000_000_000_000_000 % (top + 1)
+            return MAX_CALL_VALUE
         }
-        rng.between(0, top)
+        rng.between(0, MAX_CALL_VALUE)
     }
 }

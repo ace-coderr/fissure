@@ -165,5 +165,9 @@ pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm)
             i = i + 1
         }
     }
+    // Belt and braces: the result must fail when replayed once more.
+    if !still_fails<H>(steps, inv, gas, mut attempts) {
+        return Shrunk { steps: copy_of(run.steps), invariant: inv, reproduced: false, attempts }
+    }
     Shrunk { steps, invariant: inv, reproduced: true, attempts }
 }

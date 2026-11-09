@@ -1,8 +1,8 @@
-use ingot::gen::{Actor, Amount, Env, Flag, Generator, Pay, SmallWord, UpTo, Zero}
+use ingot::gen::{Actor, Amount, Env, Flag, Generator, MAX_CALL_VALUE, Pay, SmallWord, UpTo, Zero}
 use ingot::prng::{Prng, WORD_MAX}
 
 fn env() -> Env {
-    Env { target_balance: 1000, funds: 5000 }
+    Env { target_balance: 1000 }
 }
 
 #[test]
@@ -67,20 +67,41 @@ fn amount_handles_empty_and_full_balance() {
     var p = Prng::seeded(4)
     var i: u256 = 0
     while i < 100 {
-        let _ = Amount::generate(Env { target_balance: 0, funds: 0 }, mut p)
-        let _ = Amount::generate(Env { target_balance: WORD_MAX, funds: 0 }, mut p)
+        let _ = Amount::generate(Env { target_balance: 0 }, mut p)
+        let _ = Amount::generate(Env { target_balance: WORD_MAX }, mut p)
         i = i + 1
     }
 }
 
 #[test]
-fn pay_never_exceeds_funds() {
+fn pay_is_bounded_and_hits_its_boundaries() {
     var p = Prng::seeded(5)
+    var saw_zero = false
+    var saw_one = false
+    var saw_max = false
     var i: u256 = 0
     while i < 300 {
-        assert!(Pay::generate(env(), mut p) <= 5000)
+        let v = Pay::generate(env(), mut p)
+        assert!(v <= MAX_CALL_VALUE)
+        if v == 0 { saw_zero = true }
+        if v == 1 { saw_one = true }
+        if v == MAX_CALL_VALUE {
+            saw_max = true
+        }
+        i = i + 1
+    }
+    assert!(saw_zero && saw_one && saw_max)
+}
+
+#[test]
+fn pay_ignores_the_world() {
+    var a = Prng::seeded(8)
+    var b = Prng::seeded(8)
+    var i: u256 = 0
+    while i < 50 {
         assert!(
-            Pay::generate(Env { target_balance: 0, funds: 0 }, mut p) == 0,
+            Pay::generate(Env { target_balance: 0 }, mut a)
+                == Pay::generate(Env { target_balance: 12345 }, mut b),
         )
         i = i + 1
     }

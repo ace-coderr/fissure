@@ -37,8 +37,8 @@ Accepted `withdraw` calls (the deepest state transition) went from 18 to 45.
 
 Each menu entry names a generator for the value and for each argument word
 (`Call1<Withdraw, Zero, Actor>`): `Zero` value for non-payable calls, `Actor`
-addresses above the precompile range, `Pay` bounded by the sender's funds with
-boundary values (0, 1, all funds, 1 ether). `Amount` aims at the contract's
+addresses above the precompile range, `Pay` (up to 10 ether) with
+boundary values (0, 1 wei, 1 ether, 10 ether). `Amount` aims at the contract's
 current balance (0, 1, balance, balance-1, balance+1, max) for amount arguments;
 the vault has no amount argument, so it is unit-tested but unused here.
 
