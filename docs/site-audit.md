@@ -110,7 +110,7 @@ Site `fissure-fe` in the `ace-won` team, https://fissure-fe.netlify.app. Base di
   deploy. After the owner changed it, production is public (HTTP 200 on `/`, `/replay`
   and `/mutants`, including direct loads). Deploy previews stay protected
   (`sso_login` applies to non-production deploys only).
-- **Real data live.** Checked in a browser on the live URL: the Overview shows 114 tests,
+- **Real data live.** Checked in a browser on the live URL (data from code commit `c5a7650`, so 114 tests; after the relay fix the data was refreshed from `468389e` and the site shows 119): the Overview shows 114 tests,
   19 replays, 9/11 and 5/6; the Replay result reads "4 calls shrunk to 2 in 19 replays" with
   the real seed; the Mutants page has 18 rows (17 mutants plus the control), the four
   summary counts 7/11, 9/11, 6/6, 5/6, and the five mutants that any harness missed

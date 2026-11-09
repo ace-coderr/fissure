@@ -282,3 +282,22 @@ held and 1 did not:
   catch rate is expected. The held-out part is only that the generators and
   harnesses were not changed after seeing these results.
 
+### Re-check after the relay fix (code commit `468389e`)
+
+The relay bug fixed in `468389e` (docs/audit.md, round 5) touched `src/relay.fe` and added
+`src/calldata_tests.fe`; nothing else in `src/` changed since the previous code commit
+`c5a7650`.
+
+- **The six frozen files are unchanged.** `git hash-object` of each, at `468389e`, equals
+  the table in 9a and equals the blob at the freeze commit `1af440e`
+  (`501b5a5164f8`, `35d2aceb276f`, `841359c4cfdc`, `8bc18d86f020`, `e7aaf196fdf5`,
+  `96049865a197`). `git diff 1af440e 468389e` over those six files is empty.
+- **No result in this study changed.** The relay carries every multi-sender call, so
+  the whole study was re-run at `468389e`: the decoded output of `fe test --show-logs -f mutant_`
+  (241 lines: every seed, shrunk sequence, replay count and table) contains exactly the same
+  lines as before the fix. Only their order differs, because tests run in parallel. The data
+  generated for the project site from it is identical except for its provenance and the test
+  count (114 to 119). The demo output (seed, 4 calls shrunk to 2, 19 replays) is identical.
+- Why it could not matter: every message in the study has at most three static words,
+  and the fix only changes calls to messages of more than three.
+

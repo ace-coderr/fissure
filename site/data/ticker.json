@@ -1,7 +1,7 @@
 {
   "provenance": {
-    "codeCommit": "c5a7650c21173a50014746a8360e878ed80cf1f9",
-    "capturedAtCommit": "79ac35afcbb67adafb659378ccd7fb7371136c9e",
+    "codeCommit": "468389e66e03e43030eab0f18e5cc9074a5f27c8",
+    "capturedAtCommit": "b66dca64a8fa9b6c95eb5ed02f9ae30f3936f025",
     "fe": "fe 26.5.0 (3dab95f)",
     "captured": "2026-11-09",
     "sources": [
@@ -34,7 +34,7 @@
     "mutant 9: wrong spender in transferFrom",
     "mutant 10: mint without access control",
     "revert rate 67.2% → 13.0%",
-    "114 tests, 0 failed",
+    "119 tests, 0 failed",
     "fe 26.5.0 (3dab95f)"
   ]
 }

@@ -275,7 +275,7 @@ freeze (`git hash-object` of each file equals the table there).
 | Generators and harnesses unchanged since the freeze | The six frozen files hash to the values recorded before the held-out mutants were written |
 | Held-out results deterministic | Identical across two default runs and `-O 2` |
 | CI equals local, final head | The decoded output of both mutation suites and the held-out table (206 lines) is identical in the CI log and locally; the demo seed and replay count match |
-| Fresh clone from GitHub, in WSL, at the final head | `fe fmt --check` clean; `fe test`: 114 passed, 0 failed; `fe build`: 15 artifacts written; the 4 demo tests pass; no file modified by build or test |
+| Fresh clone from GitHub, in WSL, at head `17416e5` (114 tests then; 119 since round 5) | `fe fmt --check` clean; `fe test`: 114 passed, 0 failed; `fe build`: 15 artifacts written; the 4 demo tests pass; no file modified by build or test |
 | Rules | All 22+ commits use the noreply identity; no co-author or "generated with" lines; no `.claude/` or other tooling files tracked; no personal paths or addresses in tracked files |
 
 ---
