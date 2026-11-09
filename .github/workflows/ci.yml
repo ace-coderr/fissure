@@ -26,3 +26,5 @@ jobs:
       - run: fe build
       - name: Demo (Fissure finds the seeded bug)
         run: npm run demo
+      - name: ERC-20 mutation results (decoded)
+        run: fe test --show-logs -f mutant_ | node scripts/fissure-report.mjs out/CoolCoin.abi.json
