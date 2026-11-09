@@ -1,0 +1,56 @@
+//! Deterministic seeded pseudo-random numbers (SplitMix-style, 256-bit state).
+//!
+//! The same seed always yields the same stream, on any machine: there is no
+//! clock, no chain data and no hidden state.
+
+/// The largest 256-bit word.
+pub const WORD_MAX: u256 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+/// A source of pseudo-random 256-bit words.
+pub trait Draw {
+    fn next(mut self) -> u256
+
+    /// A value in `[0, n)`. Returns 0 when `n` is 0 (never panics).
+    fn below(mut self, _ n: u256) -> u256 {
+        if n == 0 { return 0 }
+        self.next() % n
+    }
+
+    /// A value in `[lo, hi]`, both inclusive. `hi <= lo` gives `lo`.
+    fn between(mut self, _ lo: u256, _ hi: u256) -> u256 {
+        if hi <= lo { return lo }
+        let span = hi - lo
+        if span == WORD_MAX {
+            return self.next()
+        }
+        lo + self.below(span + 1)
+    }
+}
+
+pub struct Prng { state: u256 }
+
+impl Prng {
+    pub fn seeded(_ seed: u256) -> Self {
+        Prng { state: seed }
+    }
+
+    /// A sub-stream seed: the same `(seed, index)` always gives the same value.
+    #[arithmetic(unchecked)]
+    pub fn derive(_ seed: u256, _ index: u256) -> u256 {
+        var p = Prng { state: seed ^ (index * 0x9e3779b97f4a7c15 + 0x632be59bd9b4e019) }
+        p.next()
+    }
+}
+
+impl Draw for Prng {
+    #[arithmetic(unchecked)]
+    fn next(mut self) -> u256 {
+        self.state = self.state + 0x9e3779b97f4a7c15f39cc0605cedc834
+        var z = self.state
+        z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+        z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+        z = z ^ (z >> 31)
+        z = z ^ (z << 128)
+        z
+    }
+}

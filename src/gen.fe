@@ -1,0 +1,122 @@
+//! Typed argument generators.
+//!
+//! A `Generator` produces one 256-bit ABI word for one argument slot. The
+//! word is shaped for the argument's type (an address, a bounded amount, a
+//! flag), so most generated calls pass the callee's own decoder and reach deep
+//! state. `Env` is the world the generator can aim at: the target's current
+//! balance and the caller's funds.
+
+use ingot::prng::{Draw, WORD_MAX}
+
+/// What a generator may look at when it draws a value.
+pub struct Env {
+    /// Native balance currently held by the contract under test.
+    pub target_balance: u256,
+    /// Native balance of the account sending the calls.
+    pub funds: u256,
+}
+
+pub trait Generator {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256
+}
+
+/// Always zero. Fills argument slots a call does not use.
+pub struct Zero {}
+
+impl Generator for Zero {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        0
+    }
+}
+
+/// Untyped baseline: a small integer in `0..4`. It is a valid bool-ish,
+/// address-ish and amount-ish word at once, and the reason most untyped
+/// calls revert (no actor is ever funded, no amount is ever meaningful).
+pub struct SmallWord {}
+
+impl Generator for SmallWord {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        rng.below(4)
+    }
+}
+
+/// A bool: 0 or 1.
+pub struct Flag {}
+
+impl Generator for Flag {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        rng.below(2)
+    }
+}
+
+/// One of four actor addresses, `0x1000..0x1003`. They sit above the
+/// precompile range (`0x1..0x9`), which would make a plain value transfer fail.
+pub struct Actor {}
+
+impl Generator for Actor {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        0x1000 + rng.below(4)
+    }
+}
+
+/// Uniform in `0..=MAX`.
+pub struct UpTo<const MAX: usize> {}
+
+impl<const MAX: usize> Generator for UpTo<MAX> {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        rng.between(0, MAX as u256)
+    }
+}
+
+/// An amount aimed at the contract's balance: boundaries (0, 1, the balance,
+/// one off the balance, the word maximum) and a random value near it.
+pub struct Amount {}
+
+impl Generator for Amount {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        let bal = env.target_balance
+        let pick = rng.below(8)
+        if pick == 0 { return 0 }
+        if pick == 1 { return 1 }
+        if pick == 2 || pick == 3 {
+            return bal
+        }
+        if pick == 4 {
+            if bal == 0 { return 1 }
+            return bal - 1
+        }
+        if pick == 5 {
+            if bal == WORD_MAX {
+                return bal
+            }
+            return bal + 1
+        }
+        if pick == 6 {
+            return rng.between(0, bal)
+        }
+        WORD_MAX
+    }
+}
+
+/// Native value to attach to a call. Never more than the caller holds, and
+/// capped at 100 ether so repeated replays do not drain the test account.
+pub struct Pay {}
+
+impl Generator for Pay {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        let cap = 100_000_000_000_000_000_000
+        var top = env.funds
+        if top > cap { top = cap }
+        let pick = rng.below(6)
+        if pick == 0 { return 0 }
+        if pick == 1 {
+            if top == 0 { return 0 }
+            return 1
+        }
+        if pick == 2 { return top }
+        if pick == 3 {
+            return 1_000_000_000_000_000_000 % (top + 1)
+        }
+        rng.between(0, top)
+    }
+}

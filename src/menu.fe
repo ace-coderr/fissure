@@ -1,0 +1,123 @@
+//! The menu of calls Fissure may make, and how a call becomes calldata.
+//!
+//! A `msg` block cannot be enumerated, so the user lists the variants once as a
+//! type: `Cons<Call2<Withdraw, Pay, Actor, Zero>, Cons<..., Nil>>`. Every call is
+//! built as `selector ++ words` straight from `MsgVariant`, with no per-message
+//! code. The callee's own decoder accepts or rejects the words.
+
+use core::message::MsgVariant
+use core::abi::AbiSize
+use core::ptr::MemBuffer
+use std::abi::sol::Sol
+use std::evm::wei
+use ingot::gen::{Env, Generator, SmallWord, Zero}
+use ingot::prng::Draw
+
+/// One concrete call: which menu entry, the native value sent, and up to three
+/// argument words. A step is plain data, so it can be printed, replayed and
+/// shrunk without knowing any message type.
+pub struct Step { pub variant: u256, pub value: u256, pub w0: u256, pub w1: u256, pub w2: u256 }
+
+impl Copy for Step {}
+
+/// One menu entry: message `M`, with a generator for the attached value and one
+/// per argument word. Unused word slots take `Zero`.
+pub struct Call<M, V, A0, A1, A2> {}
+
+pub type Call0<M, V> = Call<M, V, Zero, Zero, Zero>
+pub type Call1<M, V, A0> = Call<M, V, A0, Zero, Zero>
+pub type Call2<M, V, A0, A1> = Call<M, V, A0, A1, Zero>
+/// The untyped baseline: small integers everywhere. Used to measure what typed
+/// generation buys.
+pub type Untyped<M> = Call<M, SmallWord, SmallWord, SmallWord, SmallWord>
+
+pub trait Entry {
+    fn draw<R: Draw>(_ env: Env, _ rng: mut R) -> Step
+    fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
+    uses (evm: mut Evm)
+}
+
+impl<M, V, A0, A1, A2> Entry for Call<M, V, A0, A1, A2>
+where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Generator {
+    fn draw<R: Draw>(_ env: Env, _ rng: mut R) -> Step {
+        let value = V::generate(env, mut rng)
+        let w0 = A0::generate(env, mut rng)
+        let w1 = A1::generate(env, mut rng)
+        let w2 = A2::generate(env, mut rng)
+        Step { variant: 0, value, w0, w1, w2 }
+    }
+
+    fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
+    uses (evm: mut Evm)
+    {
+        let size = <M as AbiSize>::HEAD_SIZE as usize
+        var buf = MemBuffer::alloc(36 + size)
+        let sel = <M as MsgVariant<Sol>>::SELECTOR
+        buf.write_word(offset: 0, value: (sel as u256) << 224)
+        if size >= 32 {
+            buf.write_word(offset: 4, value: step.w0)
+        }
+        if size >= 64 {
+            buf.write_word(offset: 36, value: step.w1)
+        }
+        if size >= 96 {
+            buf.write_word(offset: 68, value: step.w2)
+        }
+        buf.truncate(4 + size)
+        evm.try_call_raw(
+            addr: target,
+            gas: gas,
+            value: wei(step.value),
+            args: buf.span(),
+        ).success()
+    }
+}
+
+pub struct Nil {}
+pub struct Cons<H, T> {}
+
+/// A type-level list of `Entry` types.
+pub trait Menu {
+    const LEN: u256
+    fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step
+    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
+    uses (evm: mut Evm)
+}
+
+impl Menu for Nil {
+    const LEN: u256 = 0
+
+    fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step {
+        Step { variant: 0, value: 0, w0: 0, w1: 0, w2: 0 }
+    }
+
+    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
+    uses (evm: mut Evm)
+    {
+        false
+    }
+}
+
+impl<H, T> Menu for Cons<H, T> where H: Entry, T: Menu {
+    const LEN: u256 = 1 + T::LEN
+
+    fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step {
+        if i == 0 {
+            var s = H::draw(env, mut rng)
+            s.variant = 0
+            return s
+        }
+        var s = T::draw_at(i - 1, env, mut rng)
+        s.variant = i
+        s
+    }
+
+    fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
+    uses (evm: mut Evm)
+    {
+        if i == 0 {
+            return H::fire(target, gas, step)
+        }
+        T::fire_at(i - 1, target, gas, step)
+    }
+}

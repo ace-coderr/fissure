@@ -1,0 +1,87 @@
+use ingot::gen::{Actor, Amount, Env, Flag, Generator, Pay, SmallWord, UpTo, Zero}
+use ingot::prng::{Prng, WORD_MAX}
+
+fn env() -> Env {
+    Env { target_balance: 1000, funds: 5000 }
+}
+
+#[test]
+fn zero_and_small_word() {
+    var p = Prng::seeded(1)
+    assert!(Zero::generate(env(), mut p) == 0)
+    var i: u256 = 0
+    while i < 100 {
+        assert!(SmallWord::generate(env(), mut p) < 4)
+        i = i + 1
+    }
+}
+
+#[test]
+fn flag_actor_bounds() {
+    var p = Prng::seeded(2)
+    var i: u256 = 0
+    while i < 100 {
+        assert!(Flag::generate(env(), mut p) <= 1)
+        let a = Actor::generate(env(), mut p)
+        assert!(a >= 0x1000 && a <= 0x1003)
+        assert!(UpTo<7>::generate(env(), mut p) <= 7)
+        i = i + 1
+    }
+}
+
+#[test]
+fn amount_hits_the_boundaries() {
+    var p = Prng::seeded(3)
+    var saw_zero = false
+    var saw_one = false
+    var saw_bal = false
+    var saw_below = false
+    var saw_above = false
+    var saw_max = false
+    var i: u256 = 0
+    while i < 400 {
+        let v = Amount::generate(env(), mut p)
+        if v == 0 { saw_zero = true }
+        if v == 1 { saw_one = true }
+        if v == 1000 {
+            saw_bal = true
+        }
+        if v == 999 {
+            saw_below = true
+        }
+        if v == 1001 {
+            saw_above = true
+        }
+        if v == WORD_MAX {
+            saw_max = true
+        }
+        i = i + 1
+    }
+    assert!(
+        saw_zero && saw_one && saw_bal && saw_below && saw_above && saw_max,
+    )
+}
+
+#[test]
+fn amount_handles_empty_and_full_balance() {
+    var p = Prng::seeded(4)
+    var i: u256 = 0
+    while i < 100 {
+        let _ = Amount::generate(Env { target_balance: 0, funds: 0 }, mut p)
+        let _ = Amount::generate(Env { target_balance: WORD_MAX, funds: 0 }, mut p)
+        i = i + 1
+    }
+}
+
+#[test]
+fn pay_never_exceeds_funds() {
+    var p = Prng::seeded(5)
+    var i: u256 = 0
+    while i < 300 {
+        assert!(Pay::generate(env(), mut p) <= 5000)
+        assert!(
+            Pay::generate(Env { target_balance: 0, funds: 0 }, mut p) == 0,
+        )
+        i = i + 1
+    }
+}

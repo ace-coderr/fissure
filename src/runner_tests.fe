@@ -1,0 +1,146 @@
+use ingot::gen::{Actor, Pay, Zero}
+use ingot::menu::{Call0, Call1, Cons, Nil, Step}
+use ingot::runner::{Config, Harness, Run, assert_holds, fuzz}
+use ingot::vault_ok::{VaultMsg, VaultOk}
+use std::evm::Duration
+
+type Calls = Cons<Call0<VaultMsg::Deposit, Pay>, Cons<Call1<VaultMsg::Withdraw, Zero, Actor>, Nil>>
+
+fn deploy_vault(_ salt: u256) -> Address uses (evm: mut Evm) {
+    evm.create2<VaultOk>(value: Wei::zero(), args: (Duration::zero(),), salt: salt)
+}
+
+/// Holds forever: nothing is ever wrong.
+struct Fine {}
+
+impl Harness for Fine {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+}
+
+/// Breaks as soon as the vault holds any ether: proves the runner notices.
+struct Canary {}
+
+impl Harness for Canary {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        if evm.balance(target) > Wei::zero() {
+            return 7
+        }
+        0
+    }
+}
+
+/// Already broken before the first call.
+struct BrokenAtStart {}
+
+impl Harness for BrokenAtStart {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        3
+    }
+}
+
+type NoCalls = Nil
+
+struct Empty {}
+
+impl Harness for Empty {
+    type Calls = NoCalls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+}
+
+fn same_step(_ a: Step, _ b: Step) -> bool {
+    a.variant == b.variant && a.value == b.value && a.w0 == b.w0 && a.w1 == b.w1 && a.w2 == b.w2
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn clean_run_reports_no_break() uses (evm: mut Evm) {
+    let run = fuzz<Fine>(Config { seed: 5, steps: 50, gas: 300000 }, 0)
+    assert!(run.broken == 0)
+    assert!(run.executed == 50)
+    assert!(run.steps.len() == 50)
+    assert!(run.accepted > 0 && run.accepted <= 50)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn canary_is_caught_and_stops_the_run() uses (evm: mut Evm) {
+    let run = fuzz<Canary>(Config { seed: 5, steps: 200, gas: 300000 }, 0)
+    assert!(run.broken == 7)
+    assert!(run.executed == run.at + 1)
+    assert!(run.executed < 200)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn broken_before_first_call_is_reported() uses (evm: mut Evm) {
+    let run = fuzz<BrokenAtStart>(Config { seed: 5, steps: 10, gas: 300000 }, 0)
+    assert!(run.broken == 3)
+    assert!(run.executed == 0)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn same_seed_same_run() uses (evm: mut Evm) {
+    let a = fuzz<Fine>(Config { seed: 11, steps: 60, gas: 300000 }, 0)
+    let b = fuzz<Fine>(Config { seed: 11, steps: 60, gas: 300000 }, 1)
+    assert!(a.accepted == b.accepted)
+    var i: usize = 0
+    while i < a.steps.len() {
+        assert!(same_step(a.steps[i], b.steps[i]))
+        i = i + 1
+    }
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn different_seeds_give_different_runs() uses (evm: mut Evm) {
+    let a = fuzz<Fine>(Config { seed: 1, steps: 40, gas: 300000 }, 0)
+    let b = fuzz<Fine>(Config { seed: 2, steps: 40, gas: 300000 }, 1)
+    var differs = false
+    var i: usize = 0
+    while i < a.steps.len() {
+        if !same_step(a.steps[i], b.steps[i]) {
+            differs = true
+        }
+        i = i + 1
+    }
+    assert!(differs)
+}
+
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn empty_menu_is_an_error_not_a_pass() uses (evm: mut Evm) {
+    let _ = fuzz<Empty>(Config { seed: 1, steps: 10, gas: 300000 }, 0)
+}
+
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn assert_holds_reverts_on_a_break() uses (evm: mut Evm) {
+    assert_holds<Canary>(Config { seed: 5, steps: 200, gas: 300000 })
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn zero_steps_is_a_clean_empty_run() uses (evm: mut Evm) {
+    let run = fuzz<Fine>(Config { seed: 1, steps: 0, gas: 300000 }, 0)
+    assert!(run.executed == 0 && run.broken == 0)
+}

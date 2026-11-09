@@ -1,0 +1,52 @@
+use ingot::prng::{Draw, Prng, WORD_MAX}
+
+#[test]
+fn same_seed_same_stream() {
+    var a = Prng::seeded(7)
+    var b = Prng::seeded(7)
+    var i: u256 = 0
+    while i < 50 {
+        assert!(a.next() == b.next())
+        i = i + 1
+    }
+}
+
+#[test]
+fn different_seeds_differ() {
+    var a = Prng::seeded(1)
+    var b = Prng::seeded(2)
+    assert!(a.next() != b.next())
+}
+
+#[test]
+fn below_stays_in_range_and_zero_is_safe() {
+    var p = Prng::seeded(99)
+    var i: u256 = 0
+    while i < 200 {
+        assert!(p.below(5) < 5)
+        i = i + 1
+    }
+    assert!(p.below(0) == 0)
+    assert!(p.below(1) == 0)
+}
+
+#[test]
+fn between_is_inclusive_and_total() {
+    var p = Prng::seeded(3)
+    var i: u256 = 0
+    while i < 200 {
+        let v = p.between(10, 12)
+        assert!(v >= 10 && v <= 12)
+        i = i + 1
+    }
+    assert!(p.between(5, 5) == 5)
+    assert!(p.between(9, 2) == 9)
+    let _ = p.between(0, WORD_MAX)
+}
+
+#[test]
+fn derive_is_stable_and_index_sensitive() {
+    assert!(Prng::derive(5, 1) == Prng::derive(5, 1))
+    assert!(Prng::derive(5, 1) != Prng::derive(5, 2))
+    assert!(Prng::derive(5, 1) != Prng::derive(6, 1))
+}

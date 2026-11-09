@@ -1,11 +1,11 @@
 // Run the tests with `fe test`.
 
-use ingot::{Vault, VaultMsg}
+use ingot::vault_ok::{VaultMsg, VaultOk}
 use std::evm::{days, ether}
 
 #[test(balance = 10_000_000_000_000_000_000)]
 fn deposit_is_locked() uses (evm: mut Evm) {
-    let vault = evm.create2<Vault>(value: Wei::zero(), args: (days(7),), salt: 0)
+    let vault = evm.create2<VaultOk>(value: Wei::zero(), args: (days(7),), salt: 0)
 
     let unlock: Timestamp = evm
         .call(
@@ -35,7 +35,7 @@ fn deposit_is_locked() uses (evm: mut Evm) {
 
 #[test(should_revert, balance = 10_000_000_000_000_000_000)]
 fn withdraw_before_unlock_reverts() uses (evm: mut Evm) {
-    let vault = evm.create2<Vault>(value: Wei::zero(), args: (days(7),), salt: 0)
+    let vault = evm.create2<VaultOk>(value: Wei::zero(), args: (days(7),), salt: 0)
     let _: Timestamp = evm
         .call(
             addr: vault,
@@ -55,7 +55,7 @@ fn withdraw_before_unlock_reverts() uses (evm: mut Evm) {
 #[test(balance = 10_000_000_000_000_000_000)]
 fn withdraw_after_unlock() uses (evm: mut Evm) {
     // Without a lock period, a deposit can be withdrawn right away.
-    let vault = evm.create2<Vault>(value: Wei::zero(), args: (Duration::zero(),), salt: 0)
+    let vault = evm.create2<VaultOk>(value: Wei::zero(), args: (Duration::zero(),), salt: 0)
     let _: Timestamp = evm
         .call(
             addr: vault,

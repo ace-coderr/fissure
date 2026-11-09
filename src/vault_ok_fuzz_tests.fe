@@ -1,0 +1,111 @@
+//! Fissure run against vault_ok: invariants, harnesses, and revert-rate probes.
+
+use ingot::gen::{Actor, Pay, Zero}
+use ingot::menu::{Call0, Call1, Cons, Nil, Untyped}
+use ingot::runner::{Config, Harness, Run, assert_holds, fuzz}
+use ingot::vault_ok::{VaultMsg, VaultOk}
+use std::evm::Duration
+
+#[event]
+struct Rate { variant: u256, calls: u256, accepted: u256 }
+
+/// Invariant 1: the vault holds exactly what its only depositor is owed.
+fn conserved(_ target: Address) -> bool uses (evm: mut Evm) {
+    let owed: Wei = evm
+        .call(
+            addr: target,
+            gas: 100000,
+            value: Wei::zero(),
+            message: VaultMsg::BalanceOf { owner: evm.address() },
+        )
+    evm.balance(target) == owed
+}
+
+fn vault_invariants(_ target: Address) -> u256 uses (evm: mut Evm) {
+    if !conserved(target) {
+        return 1
+    }
+    0
+}
+
+fn deploy_vault(_ salt: u256) -> Address uses (evm: mut Evm) {
+    evm.create2<VaultOk>(value: Wei::zero(), args: (Duration::zero(),), salt: salt)
+}
+
+// Baseline: every argument is a small integer.
+type UntypedCalls = Cons<
+    Untyped<VaultMsg::Deposit>,
+    Cons<
+        Untyped<VaultMsg::Withdraw>,
+        Cons<Untyped<VaultMsg::BalanceOf>, Cons<Untyped<VaultMsg::UnlockTime>, Nil>>,
+    >,
+>
+
+// Typed: value and arguments shaped for what each argument is.
+type TypedCalls = Cons<
+    Call0<VaultMsg::Deposit, Pay>,
+    Cons<
+        Call1<VaultMsg::Withdraw, Zero, Actor>,
+        Cons<
+            Call1<VaultMsg::BalanceOf, Zero, Actor>,
+            Cons<Call1<VaultMsg::UnlockTime, Zero, Actor>, Nil>,
+        >,
+    >,
+>
+
+struct UntypedVault {}
+
+impl Harness for UntypedVault {
+    type Calls = UntypedCalls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        vault_invariants(target)
+    }
+}
+
+struct TypedVault {}
+
+impl Harness for TypedVault {
+    type Calls = TypedCalls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        vault_invariants(target)
+    }
+}
+
+fn report(_ run: Run) uses (evm: mut Evm) {
+    var i: usize = 0
+    while i < run.calls.len() {
+        evm.emit(
+            Rate { variant: i as u256, calls: run.calls[i], accepted: run.ok[i] },
+        )
+        i = i + 1
+    }
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn rate_untyped() uses (evm: mut Evm) {
+    let run = fuzz<UntypedVault>(Config { seed: 1, steps: 400, gas: 300000 }, 0)
+    report(run)
+    assert!(run.broken == 0)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn rate_typed() uses (evm: mut Evm) {
+    let run = fuzz<TypedVault>(Config { seed: 1, steps: 400, gas: 300000 }, 0)
+    report(run)
+    assert!(run.broken == 0)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn vault_ok_survives_fuzzing() uses (evm: mut Evm) {
+    assert_holds<TypedVault>(Config { seed: 7, steps: 300, gas: 300000 })
+}

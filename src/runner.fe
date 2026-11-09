@@ -1,0 +1,134 @@
+//! The sequence runner: deploy the target, apply random calls, check
+//! invariants after every call.
+//!
+//! Effects are explicit: everything that touches the chain declares
+//! `uses (evm: mut Evm)`; the randomness is a plain value (`Prng`) threaded by
+//! `mut`, never ambient state.
+
+use core::ptr::MemVec
+use ingot::gen::Env
+use ingot::menu::{Menu, Step}
+use ingot::prng::{Draw, Prng}
+use std::evm::effects::revert_error
+
+/// What the user supplies: how to deploy the contract under test, the menu of
+/// calls, and the invariants. `check` returns 0 when every invariant holds, or
+/// the 1-based id of the first one that does not.
+pub trait Harness {
+    type Calls: Menu
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm)
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm)
+}
+
+pub struct Config {
+    /// Everything is derived from this value: same seed, same run.
+    pub seed: u256,
+    /// Number of calls to make.
+    pub steps: u256,
+    /// Gas forwarded to each call.
+    pub gas: u256,
+}
+
+/// The result of one run.
+pub struct Run {
+    /// 0 when all invariants held; otherwise the id of the one that broke.
+    pub broken: u256,
+    /// Index (0-based) of the call after which the invariant broke.
+    pub at: u256,
+    /// Calls made.
+    pub executed: u256,
+    /// Calls the callee accepted (did not revert).
+    pub accepted: u256,
+    /// Per menu entry: calls made.
+    pub calls: MemVec<u256>,
+    /// Per menu entry: calls accepted.
+    pub ok: MemVec<u256>,
+    /// Every call made, in order.
+    pub steps: MemVec<Step>,
+}
+
+#[error]
+pub struct EmptyMenu {}
+
+/// Raised when an invariant breaks: the seed reproduces the run and `at` is the
+/// call that exposed it.
+#[error]
+pub struct InvariantBroken { pub seed: u256, pub at: u256, pub invariant: u256 }
+
+fn zeros(_ n: u256) -> MemVec<u256> {
+    var v = MemVec<u256>::new()
+    var i: u256 = 0
+    while i < n {
+        v.push(0)
+        i = i + 1
+    }
+    v
+}
+
+fn world(_ target: Address) -> Env uses (evm: Evm) {
+    Env { target_balance: evm.balance(target).as_wei(), funds: evm.balance(evm.address()).as_wei() }
+}
+
+/// Deploy a fresh target and make `cfg.steps` random calls, checking the
+/// invariants after each. Stops at the first broken invariant.
+pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) {
+    let len = H::Calls::LEN
+    if len == 0 {
+        revert_error(EmptyMenu {})
+    }
+    let target = H::deploy(salt)
+    var run = Run {
+        broken: 0,
+        at: 0,
+        executed: 0,
+        accepted: 0,
+        calls: zeros(len),
+        ok: zeros(len),
+        steps: MemVec<Step>::new(),
+    }
+
+    let pre = H::check(target)
+    if pre != 0 {
+        run.broken = pre
+        return run
+    }
+
+    var i: u256 = 0
+    while i < cfg.steps {
+        var rng = Prng::seeded(Prng::derive(cfg.seed, i))
+        let which = rng.below(len)
+        var step = H::Calls::draw_at(which, world(target), mut rng)
+        step.variant = which
+
+        let accepted = H::Calls::fire_at(which, target, cfg.gas, step)
+        run.steps.push(step)
+        run.executed = run.executed + 1
+        run.calls.set(which as usize, run.calls[which as usize] + 1)
+        if accepted {
+            run.accepted = run.accepted + 1
+            run.ok.set(which as usize, run.ok[which as usize] + 1)
+        }
+
+        let broke = H::check(target)
+        if broke != 0 {
+            run.broken = broke
+            run.at = i
+            return run
+        }
+        i = i + 1
+    }
+    run
+}
+
+/// `fuzz`, then revert with `InvariantBroken` if an invariant broke. Use this
+/// as the body of a test: a clean run returns normally.
+pub fn assert_holds<H: Harness>(_ cfg: Config) uses (evm: mut Evm) {
+    let seed = cfg.seed
+    let run = fuzz<H>(cfg, 0)
+    if run.broken != 0 {
+        revert_error(
+            InvariantBroken { seed, at: run.at, invariant: run.broken },
+        )
+    }
+}
