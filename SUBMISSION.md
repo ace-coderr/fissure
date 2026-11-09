@@ -5,6 +5,7 @@ Fe Builders Challenge, submission deadline November 24, 2026, 23:59 UTC.
 **Pitch:** Fissure is a stateful invariant-testing toolkit written in Fe: it turns a contract's `msg` types into random call sequences inside `fe test`, checks your invariants after every call, and shrinks any failure to a minimal sequence you can replay.
 
 - Repository: https://github.com/ace-coderr/fissure
+- Project site: https://fissure-fe.netlify.app (Netlify, deployed automatically from `main`; source in `site/`)
 - License: Apache-2.0 (`LICENSE`)
 - Manifest: `fe.toml` (ingot `fissure` 0.1.0)
 - Fe version: **26.5.0** (`fe 26.5.0 (3dab95f)`), pinned as `FE_VERSION: v26.5.0` in `.github/workflows/ci.yml`

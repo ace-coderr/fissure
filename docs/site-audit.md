@@ -98,3 +98,25 @@ under 680 px.
 - A first performance run accidentally hit a different local app that was already
   serving on port 4173; those numbers were discarded and everything above was measured
   on this site's own build.
+
+## Live check (Netlify)
+
+Site `fissure-fe` in the `ace-won` team, https://fissure-fe.netlify.app. Base directory
+`site`, build `npm run build`, publish `dist`, GitHub `ace-coderr/fissure` branch `main`.
+
+- **Automatic deploys confirmed.** Pushing commit `223de8b` (a one-line change to
+  `site/README.md`) started a new production deploy by itself; it reached `ready`.
+- **Access.** The first deploy returned HTTP 401: a team-level SSO setting protected every
+  deploy. After the owner changed it, production is public (HTTP 200 on `/`, `/replay`
+  and `/mutants`, including direct loads). Deploy previews stay protected
+  (`sso_login` applies to non-production deploys only).
+- **Real data live.** Checked in a browser on the live URL: the Overview shows 114 tests,
+  19 replays, 9/11 and 5/6; the Replay result reads "4 calls shrunk to 2 in 19 replays" with
+  the real seed; the Mutants page has 18 rows (17 mutants plus the control), the four
+  summary counts 7/11, 9/11, 6/6, 5/6, and the five mutants that any harness missed
+  (3, 4, 9, 10, 13), each with its reason. Footer: Fe 26.5.0 (3dab95f), code commit
+  `c5a7650`.
+- **No third-party requests**: all fonts, scripts and styles come from the site itself.
+- **Not checked live:** the animation timing on the live host, other browsers, and any
+  device other than this desktop; see "Not verified" above.
+
