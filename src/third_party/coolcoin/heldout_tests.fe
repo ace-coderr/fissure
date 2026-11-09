@@ -1,0 +1,199 @@
+//! Held-out evaluation: mutants 12-17, written after the generators were
+//! frozen (see docs/mutation.md, step 9). Three configurations:
+//!
+//!   mode 1: one sender, the generic generators (`Holder`, `Amount`)
+//!   mode 2: test account + 2 relays, the generic generators
+//!   mode 3: test account + 2 relays, the harness-specific generators
+//!           (`Party`, `Tok`) that were tuned in step 8
+//!
+//! Nothing here is tuned to these mutants. The first run printed the table in
+//! docs/mutation.md; the assertions below only pin those observed verdicts so a
+//! later change shows up in CI. Besides the verdict, a test asserts only that a reported failure is real: the shrunk sequence
+//! replays, or the invariant was already broken on the freshly deployed
+//! contract before any call (`original_len == 0`, which cannot be shrunk).
+
+use ingot::cast::Cast
+use ingot::hunt::{Hunt, emit_hunt, hunt, hunt_cast}
+use ingot::runner::{Config, Harness}
+use ingot::menu::Step
+use core::ptr::MemVec
+use super::harness::{Deploy, Erc20Calls, Erc20Suite}
+use super::harness_multi::Erc20MultiSuite
+use super::mutant::Mutant
+
+/// Multi-sender, generic generators: the tuned harness's invariants with the
+/// single-sender harness's menu. Every hook delegates to `Erc20MultiSuite`.
+pub struct Erc20MultiGeneric<D> {}
+
+impl<D> Harness for Erc20MultiGeneric<D> where D: Deploy {
+    type Calls = Erc20Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        D::deploy()
+    }
+
+    fn check(_ token: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+
+    fn aim_with(_ token: Address, _ sender: u256) -> u256 uses (evm: mut Evm) {
+        Erc20MultiSuite<D>::aim_with(token, sender)
+    }
+
+    fn snapshot_with(_ token: Address, _ cast: Cast) -> MemVec<u256>
+    uses (evm: mut Evm)
+    {
+        Erc20MultiSuite<D>::snapshot_with(token, cast)
+    }
+
+    fn check_with(_ token: Address, _ cast: Cast) -> u256 uses (evm: mut Evm) {
+        Erc20MultiSuite<D>::check_with(token, cast)
+    }
+
+    fn check_step_with(
+        _ token: Address,
+        _ cast: Cast,
+        _ before: MemVec<u256>,
+        _ step: Step,
+        _ accepted: bool,
+    ) -> u256
+    uses (evm: mut Evm)
+    {
+        Erc20MultiSuite<D>::check_step_with(token, cast, before, step, accepted)
+    }
+}
+
+#[event]
+struct HeldOutResult {
+    id: u256,
+    mode: u256,
+    found: bool,
+    seed: u256,
+    invariant: u256,
+    original_len: u256,
+    shrunk_len: u256,
+    attempts: u256,
+    accepted: u256,
+}
+
+fn config() -> Config {
+    Config { seed: 4242, steps: 60, gas: 400000 }
+}
+
+fn record<H: Harness>(_ id: u256, _ mode: u256, _ h: Hunt) uses (evm: mut Evm) {
+    evm.emit(
+        HeldOutResult {
+            id,
+            mode,
+            found: h.found,
+            seed: h.seed,
+            invariant: h.shrunk.invariant,
+            original_len: h.original_len,
+            shrunk_len: h.shrunk.steps.len() as u256,
+            attempts: h.shrunk.attempts,
+            accepted: h.accepted,
+        },
+    )
+    emit_hunt<H>(h)
+}
+
+fn single<const ID: usize>(_ expect_found: bool) uses (evm: mut Evm) {
+    let h = hunt<Erc20Suite<Mutant<ID>>>(config(), 12)
+    assert!(h.found == expect_found)
+    assert!(!h.found || h.shrunk.reproduced || h.original_len == 0)
+    record<Erc20Suite<Mutant<ID>>>(ID as u256, 1, h)
+}
+
+fn relays_generic<const ID: usize>(_ expect_found: bool) uses (evm: mut Evm) {
+    let cast = Cast::deploy(2)
+    let h = hunt_cast<Erc20MultiGeneric<Mutant<ID>>>(config(), 25, cast)
+    assert!(h.found == expect_found)
+    assert!(!h.found || h.shrunk.reproduced || h.original_len == 0)
+    record<Erc20MultiGeneric<Mutant<ID>>>(ID as u256, 2, h)
+}
+
+fn relays_tuned<const ID: usize>(_ expect_found: bool) uses (evm: mut Evm) {
+    let cast = Cast::deploy(2)
+    let h = hunt_cast<Erc20MultiSuite<Mutant<ID>>>(config(), 25, cast)
+    assert!(h.found == expect_found)
+    assert!(!h.found || h.shrunk.reproduced || h.original_len == 0)
+    record<Erc20MultiSuite<Mutant<ID>>>(ID as u256, 3, h)
+}
+
+#[test]
+fn heldout_mutant_12_single() uses (evm: mut Evm) {
+    single<12>(true)
+}
+#[test]
+fn heldout_mutant_12_relays_generic() uses (evm: mut Evm) {
+    relays_generic<12>(true)
+}
+#[test]
+fn heldout_mutant_12_relays_tuned() uses (evm: mut Evm) {
+    relays_tuned<12>(true)
+}
+
+#[test]
+fn heldout_mutant_13_single() uses (evm: mut Evm) {
+    single<13>(true)
+}
+#[test]
+fn heldout_mutant_13_relays_generic() uses (evm: mut Evm) {
+    relays_generic<13>(false)
+}
+#[test]
+fn heldout_mutant_13_relays_tuned() uses (evm: mut Evm) {
+    relays_tuned<13>(false)
+}
+
+#[test]
+fn heldout_mutant_14_single() uses (evm: mut Evm) {
+    single<14>(true)
+}
+#[test]
+fn heldout_mutant_14_relays_generic() uses (evm: mut Evm) {
+    relays_generic<14>(true)
+}
+#[test]
+fn heldout_mutant_14_relays_tuned() uses (evm: mut Evm) {
+    relays_tuned<14>(true)
+}
+
+#[test]
+fn heldout_mutant_15_single() uses (evm: mut Evm) {
+    single<15>(true)
+}
+#[test]
+fn heldout_mutant_15_relays_generic() uses (evm: mut Evm) {
+    relays_generic<15>(true)
+}
+#[test]
+fn heldout_mutant_15_relays_tuned() uses (evm: mut Evm) {
+    relays_tuned<15>(true)
+}
+
+#[test]
+fn heldout_mutant_16_single() uses (evm: mut Evm) {
+    single<16>(true)
+}
+#[test]
+fn heldout_mutant_16_relays_generic() uses (evm: mut Evm) {
+    relays_generic<16>(true)
+}
+#[test]
+fn heldout_mutant_16_relays_tuned() uses (evm: mut Evm) {
+    relays_tuned<16>(true)
+}
+
+#[test]
+fn heldout_mutant_17_single() uses (evm: mut Evm) {
+    single<17>(true)
+}
+#[test]
+fn heldout_mutant_17_relays_generic() uses (evm: mut Evm) {
+    relays_generic<17>(true)
+}
+#[test]
+fn heldout_mutant_17_relays_tuned() uses (evm: mut Evm) {
+    relays_tuned<17>(true)
+}

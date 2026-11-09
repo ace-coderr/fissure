@@ -227,3 +227,58 @@ record in git.
 
 I have not run any of these when writing this table.
 
+### 9b. Results (one run each, nothing retuned)
+
+Same settings as step 8: seed 4242, 60 calls per run; one sender 12 runs, relays
+25 runs. Tests: `src/third_party/coolcoin/heldout_tests.fe`. Output is
+deterministic (identical across two default runs and `-O 2`).
+
+| Mutant | One sender, generic generators | 2 relays, generic generators | 2 relays, tuned generators |
+| --- | --- | --- | --- |
+| 12 large transfer skims 1 token | caught (6 -> 2, #5) | caught (48 -> 1, #1) | caught (35 -> 1, #1) |
+| 13 `approve` for actor `0x1002` dropped | caught (2 -> 1, #6) | **missed** | **missed** |
+| 14 `decreaseAllowance` off by one | caught (9 -> 1, #6) | caught (9 -> 1, #6) | caught (59 -> 1, #6) |
+| 15 `mint` forgets total supply | caught at deployment (0 calls, #1) | caught at deployment | caught at deployment |
+| 16 `burnFrom` ignores the allowance | caught (5 -> 1, #7) | caught (16 -> 1, #7) | caught (12 -> 1, #7) |
+| 17 `increaseAllowance` overwrites | caught (23 -> 2, #6) | caught (53 -> 2, #6) | caught (36 -> 2, #6) |
+| **Caught** | **6 of 6** | **5 of 6** | **5 of 6** |
+
+Shrunk sequences (ROOT is the test account): 12: `transfer(ROOT, 557)` (any
+amount above 500 does it; shrinking does not reach 501); 14: `decreaseAllowance(ROOT, 0)`;
+16: `burnFrom(ROOT, 1)`; 17: `approve(x, 1)` then `increaseAllowance(x, 0)`;
+13 (single sender): `approve(0x1002, 1)`.
+
+**Predictions against results.** Of my 18 predictions (6 mutants x 3 modes), 17
+held and 1 did not:
+
+- **Wrong: mutant 16, one sender.** I predicted it needed a second sender. It does
+  not: the real contract requires an allowance even to burn your own tokens via
+  `burnFrom`, so the mutant (which skips the allowance) is visible to a single
+  sender as soon as it calls `burnFrom` on itself. My invariant 7 checks exactly
+  that.
+- Held as predicted: 13 caught with one sender and missed with relays (the
+  multi-sender harness tracks allowances between senders only, a limit I had
+  already documented); everything else caught.
+
+**What the results do and do not show.**
+
+- **Missed, with the reason: mutant 13 with relays, in both generator sets.** The
+  multi-sender harness's snapshot omits allowances granted to non-senders (the
+  zero address and the actors) to save view calls. The bug is only visible through
+  such an allowance, so it is invisible to that harness whatever the generators
+  do. This is a harness choice made in step 8, not a generator problem, and the
+  single-sender harness, which tracks every spender, catches it.
+- **Mutant 15 is caught before any call.** Its bug is in the constructor's
+  initial mint, so the conservation invariant is broken on the freshly deployed
+  contract. Fissure reports it (`0 calls`) but cannot shrink: a failure with an
+  empty sequence is flagged `reproduced = false` by design, because the same
+  symptom is how a leaky invariant looks (see the audit).
+- **The tuned generators made no difference on these six.** The generic and the
+  tuned sets give the same verdicts, with different sequences and lengths. The
+  step-8 tuning mattered for mutants 2 and 9 (rare two-party chains); these
+  mutants do not need it.
+- **This is weak evidence.** Six mutants, written by the author who knows the
+  harness: the mutants are of kinds the invariants were designed around, so a high
+  catch rate is expected. The held-out part is only that the generators and
+  harnesses were not changed after seeing these results.
+

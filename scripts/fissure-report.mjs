@@ -79,6 +79,7 @@ const EVENTS = {
   [keccak256("ShrunkStep(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)")]: "ShrunkStep",
   [keccak256("MutantResult(uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256)")]: "MutantResult",
   [keccak256("MultiMutantResult(uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256)")]: "MultiMutantResult",
+  [keccak256("HeldOutResult(uint256,uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256)")]: "HeldOutResult",
 };
 const ERRORS = {
   [keccak256("Failure(uint256,uint256,uint256,uint256[])").slice(0, 8)]: "Failure",
@@ -128,6 +129,7 @@ let test = null;
 const found = {};
 const mutants = [];
 const multi = [];
+const heldout = [];
 let any = false;
 for (const line of text.split(/\r?\n/)) {
   const t = line.match(/^\s*(PASS|FAIL)\s+\[[^\]]+\]\s+(\S+)/);
@@ -139,7 +141,9 @@ for (const line of text.split(/\r?\n/)) {
   if (log && test) {
     const name = EVENTS[log[1].slice(2)];
     const w = words(log[2]);
-    if (name === "MultiMutantResult") {
+    if (name === "HeldOutResult") {
+      heldout.push({ test, id: w[0], mode: w[1], found: w[2] === 1n, seed: w[3], invariant: w[4], originalLen: w[5], shrunkLen: w[6], attempts: w[7], accepted: w[8] });
+    } else if (name === "MultiMutantResult") {
       multi.push({ test, id: w[0], found: w[1] === 1n, seed: w[2], invariant: w[3], originalLen: w[4], shrunkLen: w[5], attempts: w[6], accepted: w[7] });
     } else if (name === "MutantResult") {
       mutants.push({ test, id: w[0], found: w[1] === 1n, seed: w[2], invariant: w[3], originalLen: w[4], shrunkLen: w[5], attempts: w[6], accepted: w[7] });
@@ -210,6 +214,22 @@ function printTable(title, rows) {
 }
 if (mutants.length > 0) printTable("MUTATION RESULTS (single sender)", mutants);
 if (multi.length > 0) printTable("MUTATION RESULTS (test account + 2 relay senders)", multi);
+if (heldout.length > 0) {
+  any = true;
+  const names = { 1: "one sender, generic generators", 2: "2 relays, generic generators", 3: "2 relays, tuned generators" };
+  console.log("");
+  console.log("HELD-OUT MUTANTS (written after the generators were frozen)");
+  console.log("  mutant  " + [1, 2, 3].map((m) => names[m].padEnd(34)).join("  "));
+  const ids = [...new Set(heldout.map((r) => r.id))].sort((a, b) => Number(a - b));
+  for (const id of ids) {
+    const cell = (mode) => {
+      const r = heldout.find((x) => x.id === id && x.mode === BigInt(mode));
+      if (!r) return "-".padEnd(34);
+      return (r.found ? `CAUGHT #${r.invariant} ${r.originalLen}->${r.shrunkLen}` : "missed").padEnd(34);
+    };
+    console.log(`  ${String(id).padStart(6)}  ${cell(1)}  ${cell(2)}  ${cell(3)}`);
+  }
+}
 if (!any) {
   console.log("No Fissure failures in this output.");
   if (expectFound) process.exit(1);
