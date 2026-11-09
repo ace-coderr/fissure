@@ -1,0 +1,11 @@
+{
+  "name": "fissure",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Documentation tooling for Fissure. The library itself is Fe; this only pretty-prints results.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "demo": "fe build && fe test --show-logs -f demo_vault_bug_is_found | node scripts/fissure-report.mjs out/VaultBug.abi.json --expect-found"
+  }
+}

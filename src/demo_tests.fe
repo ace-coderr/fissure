@@ -1,0 +1,125 @@
+//! The demo: the same Fissure setup run against a correct vault and against
+//! the vault with one seeded bug.
+//!
+//!   npm run demo
+
+use ingot::gen::{Actor, Pay, Zero}
+use ingot::hunt::{check, emit_hunt, hunt}
+use ingot::menu::{Call0, Call1, Cons, Nil}
+use ingot::runner::{Config, Harness}
+use ingot::vault_bug::{VaultBug, VaultMsg as BugMsg}
+use ingot::vault_ok::{VaultMsg as OkMsg, VaultOk}
+use std::evm::Duration
+
+// ---- vault_ok ----
+
+type OkCalls = Cons<
+    Call0<OkMsg::Deposit, Pay>,
+    Cons<Call1<OkMsg::Withdraw, Zero, Actor>, Cons<Call1<OkMsg::BalanceOf, Zero, Actor>, Nil>>,
+>
+
+/// The invariant: the vault holds exactly what its only depositor is owed.
+fn ok_conserved(_ target: Address) -> u256 uses (evm: mut Evm) {
+    let owed: Wei = evm
+        .call(
+            addr: target,
+            gas: 100000,
+            value: Wei::zero(),
+            message: OkMsg::BalanceOf { owner: evm.address() },
+        )
+    if evm.balance(target) != owed {
+        return 1
+    }
+    0
+}
+
+struct OkVault {}
+
+impl Harness for OkVault {
+    type Calls = OkCalls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        evm.create<VaultOk>(value: Wei::zero(), args: (Duration::zero(),))
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        ok_conserved(target)
+    }
+}
+
+// ---- vault_bug ----
+
+type BugCalls = Cons<
+    Call0<BugMsg::Deposit, Pay>,
+    Cons<Call1<BugMsg::Withdraw, Zero, Actor>, Cons<Call1<BugMsg::BalanceOf, Zero, Actor>, Nil>>,
+>
+
+fn bug_conserved(_ target: Address) -> u256 uses (evm: mut Evm) {
+    let owed: Wei = evm
+        .call(
+            addr: target,
+            gas: 100000,
+            value: Wei::zero(),
+            message: BugMsg::BalanceOf { owner: evm.address() },
+        )
+    if evm.balance(target) != owed {
+        return 1
+    }
+    0
+}
+
+struct BugVault {}
+
+impl Harness for BugVault {
+    type Calls = BugCalls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        evm.create<VaultBug>(value: Wei::zero(), args: (Duration::zero(),))
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        bug_conserved(target)
+    }
+}
+
+fn config() -> Config {
+    Config { seed: 2026, steps: 80, gas: 300000 }
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn demo_vault_ok_finds_nothing() uses (evm: mut Evm) {
+    let h = hunt<OkVault>(config(), 50)
+    assert!(!h.found)
+    // Not vacuous: thousands of calls were accepted by the vault.
+    assert!(h.accepted > 1000)
+}
+
+/// The demo. Passes when Fissure finds the bug, and prints the shrunk
+/// sequence (`--show-logs`).
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn demo_vault_bug_is_found_and_shrunk() uses (evm: mut Evm) {
+    let h = hunt<BugVault>(config(), 50)
+    assert!(h.found)
+    assert!(h.shrunk.reproduced)
+    // Two deposits, both of exactly 1 wei, is the whole bug.
+    assert!(h.shrunk.steps.len() == 2)
+    assert!(
+        h.shrunk.steps[0].variant == 0 && h.shrunk.steps[0].value == 1,
+    )
+    assert!(
+        h.shrunk.steps[1].variant == 0 && h.shrunk.steps[1].value == 1,
+    )
+    emit_hunt<BugVault>(h)
+}
+
+/// What a user's own failing test looks like: the test fails with `Failure`
+/// (seed, invariant, shrunk sequence) in its revert data.
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn demo_vault_bug_fails_a_plain_check() uses (evm: mut Evm) {
+    let _ = check<BugVault>(config(), 50)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn demo_vault_ok_passes_a_plain_check() uses (evm: mut Evm) {
+    assert!(check<OkVault>(config(), 50) > 1000)
+}

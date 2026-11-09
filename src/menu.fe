@@ -33,6 +33,7 @@ pub type Untyped<M> = Call<M, SmallWord, SmallWord, SmallWord, SmallWord>
 
 pub trait Entry {
     fn draw<R: Draw>(_ env: Env, _ rng: mut R) -> Step
+    fn selector() -> u256
     fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
     uses (evm: mut Evm)
 }
@@ -45,6 +46,10 @@ where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Genera
         let w1 = A1::generate(env, mut rng)
         let w2 = A2::generate(env, mut rng)
         Step { variant: 0, value, w0, w1, w2 }
+    }
+
+    fn selector() -> u256 {
+        <M as MsgVariant<Sol>>::SELECTOR as u256
     }
 
     fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
@@ -80,6 +85,7 @@ pub struct Cons<H, T> {}
 pub trait Menu {
     const LEN: u256
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step
+    fn selector_at(_ i: u256) -> u256
     fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
     uses (evm: mut Evm)
 }
@@ -89,6 +95,10 @@ impl Menu for Nil {
 
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step {
         Step { variant: 0, value: 0, w0: 0, w1: 0, w2: 0 }
+    }
+
+    fn selector_at(_ i: u256) -> u256 {
+        0
     }
 
     fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
@@ -110,6 +120,13 @@ impl<H, T> Menu for Cons<H, T> where H: Entry, T: Menu {
         var s = T::draw_at(i - 1, env, mut rng)
         s.variant = i
         s
+    }
+
+    fn selector_at(_ i: u256) -> u256 {
+        if i == 0 {
+            return H::selector()
+        }
+        T::selector_at(i - 1)
     }
 
     fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool

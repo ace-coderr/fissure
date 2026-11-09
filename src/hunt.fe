@@ -41,6 +41,8 @@ pub struct Found {
 pub struct ShrunkStep {
     pub index: u256,
     pub variant: u256,
+    /// 4-byte selector of the message this call sends.
+    pub selector: u256,
     pub value: u256,
     pub w0: u256,
     pub w1: u256,
@@ -90,7 +92,7 @@ pub fn hunt<H: Harness>(_ cfg: Config, _ runs: u256) -> Hunt uses (evm: mut Evm)
     }
 }
 
-pub fn emit_hunt(_ h: Hunt) uses (evm: mut Evm) {
+pub fn emit_hunt<H: Harness>(_ h: Hunt) uses (evm: mut Evm) {
     if !h.found { return }
     evm.emit(
         Found {
@@ -108,6 +110,7 @@ pub fn emit_hunt(_ h: Hunt) uses (evm: mut Evm) {
             ShrunkStep {
                 index: i as u256,
                 variant: s.variant,
+                selector: H::Calls::selector_at(s.variant),
                 value: s.value,
                 w0: s.w0,
                 w1: s.w1,
