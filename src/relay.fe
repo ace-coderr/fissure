@@ -1,9 +1,10 @@
 //! A relay: a stateless contract that makes a call on someone's behalf, so the
 //! target sees the relay as `msg.sender`. Several relays are several senders.
 //!
-//! It forwards `selector ++ the first `size` bytes of three argument words` to
-//! `target` with the ether it was sent, and returns whether the target accepted
-//! the call (an inner revert is caught here and reported, not propagated).
+//! It forwards `selector ++ size bytes of arguments` to `target` with the ether
+//! it was sent, and returns whether the target accepted the call (an inner revert
+//! is caught here and reported, not propagated). The arguments are the three
+//! words it is given, then zeros up to `size`, exactly as a direct call sends them.
 
 use core::ptr::MemBuffer
 
@@ -29,15 +30,17 @@ pub contract Relay uses (ctx: Ctx, call: mut Call) {
         uses (ctx, mut call)
         {
             // Calldata is 4 selector bytes plus `size` bytes of arguments, as a
-            // direct call would send; `size` is at most three words.
-            var len = size
-            if len > 96 { len = 96 }
-            var buf = MemBuffer::alloc(100 + 32)
+            // direct call sends it: the three words given, then zeros (a fresh
+            // buffer is zeroed). The buffer is at least 100 bytes so the three
+            // word writes always fit, and `size` is not capped: a message with
+            // more than three static words needs all of its bytes or the target's
+            // decoder rejects the call as short.
+            var buf = MemBuffer::alloc(132 + size as usize)
             buf.write_word(offset: 0, value: selector << 224)
             buf.write_word(offset: 4, value: w0)
             buf.write_word(offset: 36, value: w1)
             buf.write_word(offset: 68, value: w2)
-            buf.truncate(4 + len as usize)
+            buf.truncate(4 + size as usize)
             call.try_call_raw(addr: target, gas, value: ctx.value(), args: buf.span()).success()
         }
     }

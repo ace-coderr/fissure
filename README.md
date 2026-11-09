@@ -91,7 +91,7 @@ crashed test. `docs/spike.md` records how this was found and what else was tried
   11 mutants: 7 caught and shrunk to 1-2 calls with one sender, 9 of 11 with
   several senders, 2 missed for stated reasons; plus 6 held-out mutants
   (`docs/mutation.md`, and the honesty section below).
-- **114 Fe tests**, `fe fmt --check` clean, CI green.
+- **119 Fe tests**, `fe fmt --check` clean, CI green.
 
 ## Originality
 

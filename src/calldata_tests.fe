@@ -1,0 +1,218 @@
+//! What `fire` puts on the wire. Two questions, answered by tests:
+//!
+//!   1. Does `MemBuffer::alloc` zero its memory, so no calldata byte is ever left
+//!      unwritten?
+//!   2. Do direct and relayed calls deliver the same bytes, for messages of every
+//!      static size (0, 1, 2, 3, 4 and 5 words)?
+//!
+//! Question 2 found a real bug in the relay (it capped the calldata at three
+//! words, so any longer message was rejected as short); see docs/audit.md.
+
+use core::ptr::{MemBuffer, zero_bytes}
+use ingot::cast::Cast
+use ingot::gen::Zero
+use ingot::menu::{Call, Cons, Menu, Nil, Step}
+use std::evm::StorageMap
+
+pub msg ProbeMsg {
+    #[selector = sol("p0()")]
+    P0 -> bool,
+    #[selector = sol("p1(uint256)")]
+    P1 { a: u256 } -> bool,
+    #[selector = sol("p2(uint256,uint256)")]
+    P2 { a: u256, b: u256 } -> bool,
+    #[selector = sol("p3(uint256,uint256,uint256)")]
+    P3 { a: u256, b: u256, c: u256 } -> bool,
+    #[selector = sol("p4(uint256,uint256,uint256,uint256)")]
+    P4 { a: u256, b: u256, c: u256, d: u256 } -> bool,
+    #[selector = sol("p5(uint256[5])")]
+    P5 { arr: [u256; 5] } -> bool,
+    #[selector = sol("slot(uint256)")]
+    Slot { i: u256 } -> u256,
+}
+
+/// Stores every word it decodes, so a test can read back exactly what arrived.
+pub contract CalldataProbe {
+    mut slots: StorageMap<u256, u256>,
+
+    recv ProbeMsg {
+        P0 -> bool {
+            true
+        }
+        P1 { a } -> bool uses (mut slots) {
+            slots.set(key: 0, value: a)
+            true
+        }
+        P2 { a, b } -> bool uses (mut slots) {
+            slots.set(key: 0, value: a)
+            slots.set(key: 1, value: b)
+            true
+        }
+        P3 { a, b, c } -> bool uses (mut slots) {
+            slots.set(key: 0, value: a)
+            slots.set(key: 1, value: b)
+            slots.set(key: 2, value: c)
+            true
+        }
+        P4 { a, b, c, d } -> bool uses (mut slots) {
+            slots.set(key: 0, value: a)
+            slots.set(key: 1, value: b)
+            slots.set(key: 2, value: c)
+            slots.set(key: 3, value: d)
+            true
+        }
+        P5 { arr } -> bool uses (mut slots) {
+            slots.set(key: 0, value: arr[0])
+            slots.set(key: 1, value: arr[1])
+            slots.set(key: 2, value: arr[2])
+            slots.set(key: 3, value: arr[3])
+            slots.set(key: 4, value: arr[4])
+            true
+        }
+        Slot { i } -> u256 uses (slots) {
+            slots.get(key: i)
+        }
+    }
+}
+
+type Probes = Cons<
+    Call<ProbeMsg::P0, Zero, Zero, Zero, Zero>,
+    Cons<
+        Call<ProbeMsg::P1, Zero, Zero, Zero, Zero>,
+        Cons<
+            Call<ProbeMsg::P2, Zero, Zero, Zero, Zero>,
+            Cons<
+                Call<ProbeMsg::P3, Zero, Zero, Zero, Zero>,
+                Cons<
+                    Call<ProbeMsg::P4, Zero, Zero, Zero, Zero>,
+                    Cons<Call<ProbeMsg::P5, Zero, Zero, Zero, Zero>, Nil>,
+                >,
+            >,
+        >,
+    >,
+>
+
+fn slot(_ target: Address, _ i: u256) -> u256 uses (evm: mut Evm) {
+    evm.call(
+        addr: target,
+        gas: 100000,
+        value: Wei::zero(),
+        message: ProbeMsg::Slot { i },
+    )
+}
+
+/// Fire probe `variant` with the words 0x11, 0x22, 0x33; `via` is a relay (0: direct).
+fn fire_probe(_ target: Address, _ variant: u256, _ via: u256) -> bool
+uses (evm: mut Evm)
+{
+    let step = Step { variant, value: 0, w0: 0x11, w1: 0x22, w2: 0x33, who: 0 }
+    Probes::fire_at(variant, target, 300000, step, via)
+}
+
+/// What arrived after probe `variant`: the first three words are the ones sent, any
+/// further word is zero.
+fn arrived_exactly(_ target: Address, _ words: u256) -> bool
+uses (evm: mut Evm)
+{
+    let sent = [0x11, 0x22, 0x33, 0, 0]
+    var i: u256 = 0
+    while i < words {
+        if slot(target, i) != sent[i as usize] {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}
+
+// ---- MemBuffer::alloc and zero_bytes ----
+
+fn all_zero(_ buf: MemBuffer) -> bool {
+    var i: usize = 0
+    while i < buf.len() {
+        if buf.span().byte_at(i) != 0 {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}
+
+#[test]
+fn alloc_returns_zeroed_bytes_for_awkward_lengths() {
+    let lens = [0, 1, 4, 31, 32, 33, 36, 63, 100, 131, 1000]
+    var i: usize = 0
+    while i < 11 {
+        assert!(all_zero(MemBuffer::alloc(lens[i])))
+        i = i + 1
+    }
+}
+
+#[test]
+fn zero_bytes_clears_exactly_its_range() {
+    // 64 bytes of 0xff, then zero the first 33: byte 32 is cleared, byte 33 is not.
+    var buf = unsafe {
+        MemBuffer::alloc_uninit(64)
+    }
+    buf.write_word(
+        offset: 0,
+        value: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff,
+    )
+    buf.write_word(
+        offset: 32,
+        value: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff,
+    )
+    unsafe {
+        zero_bytes(buf.ptr(), 33)
+    }
+    assert!(buf.span().byte_at(0) == 0)
+    assert!(buf.span().byte_at(32) == 0)
+    assert!(buf.span().byte_at(33) == 0xff)
+    assert!(buf.span().byte_at(63) == 0xff)
+}
+
+// ---- direct calls ----
+
+#[test]
+fn a_direct_call_delivers_the_words_and_zeros_after_them() uses (evm: mut Evm) {
+    let t = evm.create<CalldataProbe>(value: Wei::zero(), args: ())
+    assert!(fire_probe(t, 0, 0))
+    var n: u256 = 1
+    while n <= 3 {
+        assert!(fire_probe(t, n, 0))
+        assert!(arrived_exactly(t, n))
+        n = n + 1
+    }
+    // four and five words: the extra words are zero, not garbage
+    assert!(fire_probe(t, 4, 0))
+    assert!(arrived_exactly(t, 4))
+    assert!(fire_probe(t, 5, 0))
+    assert!(arrived_exactly(t, 5))
+}
+
+// ---- relayed calls: the same bytes (this failed for 4 and 5 words before the fix) ----
+
+#[test]
+fn a_relayed_call_is_accepted_for_every_message_size() uses (evm: mut Evm) {
+    let cast = Cast::deploy(1)
+    let t = evm.create<CalldataProbe>(value: Wei::zero(), args: ())
+    var v: u256 = 0
+    while v <= 5 {
+        assert!(fire_probe(t, v, cast.r0))
+        v = v + 1
+    }
+}
+
+#[test]
+fn a_relayed_call_delivers_the_same_words_as_a_direct_one()
+uses (evm: mut Evm)
+{
+    let cast = Cast::deploy(1)
+    let t = evm.create<CalldataProbe>(value: Wei::zero(), args: ())
+    var n: u256 = 1
+    while n <= 5 {
+        assert!(fire_probe(t, n, cast.r0))
+        assert!(arrived_exactly(t, n))
+        n = n + 1
+    }
+}

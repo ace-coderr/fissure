@@ -277,3 +277,47 @@ freeze (`git hash-object` of each file equals the table there).
 | CI equals local, final head | The decoded output of both mutation suites and the held-out table (206 lines) is identical in the CI log and locally; the demo seed and replay count match |
 | Fresh clone from GitHub, in WSL, at the final head | `fe fmt --check` clean; `fe test`: 114 passed, 0 failed; `fe build`: 15 artifacts written; the 4 demo tests pass; no file modified by build or test |
 | Rules | All 22+ commits use the noreply identity; no co-author or "generated with" lines; no `.claude/` or other tooling files tracked; no personal paths or addresses in tracked files |
+
+---
+
+# Round 5 (calldata bytes and the relay)
+
+A question about `fire()`: are any bytes of the calldata buffer ever left unwritten,
+and does `MemBuffer::alloc` zero its memory?
+
+## Answers
+
+- **`MemBuffer::alloc` zeroes its memory** in Fe 26.5.0: it is `alloc_uninit` followed by
+  an explicit `zero_bytes` (`core/src/ptr.fe`). `alloc_returns_zeroed_bytes_for_awkward_lengths`
+  checks lengths 0, 1, 4, 31, 32, 33, 36, 63, 100, 131 and 1000;
+  `zero_bytes_clears_exactly_its_range` checks that zeroing 33 bytes clears byte 32 and
+  leaves byte 33. Fe's allocator never frees, so a test cannot hand `alloc` a dirty
+  region: the zeroing guarantee rests on the source plus those boundary checks.
+- **No calldata byte of a direct `fire()` is left unwritten.** The buffer is zeroed at
+  `36 + size` bytes, the selector and the three words are written, and it is truncated to
+  `4 + size`. A static `HEAD_SIZE` is always 0, 32, or a sum or product of those (checked in
+  the std and core source), so a size that is not a multiple of 32 cannot occur; if it did,
+  the leftover bytes would be zero. Words beyond the third are zero, as the README says
+  (`a_direct_call_delivers_the_words_and_zeros_after_them`, with 4 and 5 word messages).
+
+## Finding 9 (real bug, fixed): relayed calls to messages of more than three words always failed
+
+`src/relay.fe` capped the calldata size at 96 bytes (`if len > 96 { len = 96 }`) before
+truncating to `4 + len`. A message of four or more static words reached its target
+with too little calldata, and the target's decoder rejected it. Direct calls were fine
+(they send the full `4 + size` bytes, zero-filled past the third word). The relay
+reported `false`, so nothing crashed: such calls were silently counted as rejected.
+
+- **Impact on published results: none.** Every vault and ERC-20 message has at most
+  three words (`transferFrom` is the widest), so no mutation, held-out or demo result
+  changes. A multi-sender run against a message of more than three words would have
+  silently lost all its relayed calls to it, and `check` would not have flagged it
+  (the direct sender still gets the entry accepted).
+- **Fix:** the buffer is `132 + size` bytes (at least 100, so the three word writes
+  always fit) and is truncated to `4 + size`; `size` is no longer capped.
+- **Tests** (`src/calldata_tests.fe`, with a probe contract that stores every word it
+  decodes): `a_relayed_call_is_accepted_for_every_message_size` and
+  `a_relayed_call_delivers_the_same_words_as_a_direct_one`, for messages of 0 to 5 words.
+  Both fail on the previous `relay.fe` and pass now. The 114 earlier tests are unchanged
+  and still pass (119 in total).
+
