@@ -229,3 +229,51 @@ mutants 2 and 9 with relays until harness-specific generators were written.
 - **Not an independent review.** Written and checked by the author with AI
   assistance.
 
+
+---
+
+# Round 4 (step 9: held-out evidence and a claim-by-claim read)
+
+No library code changed in this round. Results of the held-out mutants are in
+`docs/mutation.md`; the files that produce and judge calls are unchanged since the
+freeze (`git hash-object` of each file equals the table there).
+
+## Claims in the README and SUBMISSION.md that were not backed, and fixed
+
+- **"There is no Windows build of Fe 26.5.0."** False. The release has a
+  `fe_windows_amd64.exe` asset. I had assumed it and never checked. Now the README
+  says a Windows binary exists, that I used WSL instead, and that the Windows binary
+  is untested with this repository.
+- **"Deterministic across `-O 0`/default/`-O 2`."** Only true for the vault demo.
+  The ERC-20 hunts were checked at default and `-O 2`; at `-O 0` one runs out of
+  gas budget. The README now says exactly that.
+- **A code excerpt with an outdated `fire` signature** (it gained a `via` argument
+  in step 8). Updated and labelled as an excerpt.
+- **Test count (96)**, "audited twice", the generator list (missing `Sender` and
+  `Holder`), "give the test a large balance" (only needed when the menu attaches
+  ether), "roughly 20000 / 3000 calls fit" (they fit; higher was not tested), and
+  "a 300-line ERC-20" (it is a 368-line file including its own tests).
+- **"A real ERC-20"** overstated what the target is: a small teaching contract
+  from the Fe Guide. Reworded in the README and in these docs.
+- **"The seed ... [is] the same on every run"** reworded to "in every run I made,
+  locally and in CI".
+
+## Findings from the held-out run
+
+- Mutant 15 (the mint that forgets total supply) is in the constructor's initial
+  mint, so it breaks the invariant before any call. It is caught, but a failure
+  with an empty sequence is reported as `reproduced = false` by design (it looks
+  the same as a leaky invariant), so it cannot be shrunk. The held-out test
+  asserts "found, and either replays or broke at deployment".
+- One of my 18 predictions was wrong (mutant 16 with one sender is caught, not
+  missed).
+
+## Checks
+
+| Concern | Result |
+| --- | --- |
+| Generators and harnesses unchanged since the freeze | The six frozen files hash to the values recorded before the held-out mutants were written |
+| Held-out results deterministic | Identical across two default runs and `-O 2` |
+| CI equals local, final head | The decoded output of both mutation suites and the held-out table (206 lines) is identical in the CI log and locally; the demo seed and replay count match |
+| Fresh clone from GitHub, in WSL, at the final head | `fe fmt --check` clean; `fe test`: 114 passed, 0 failed; `fe build`: 15 artifacts written; the 4 demo tests pass; no file modified by build or test |
+| Rules | All 22+ commits use the noreply identity; no co-author or "generated with" lines; no `.claude/` or other tooling files tracked; no personal paths or addresses in tracked files |
