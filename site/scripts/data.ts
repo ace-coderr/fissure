@@ -110,6 +110,7 @@ const demoJson = {
   contract: "vault_bug",
   seed: demo.seed,
   seedHex,
+  testAccount: "0x" + BigInt(orig.testAccount).toString(16).padStart(40, "0"),
   config: { seed: Number(cfg[1]), steps: Number(cfg[2]), gas: Number(cfg[3]), runs: Number(runs[1]) },
   invariant: { id: demo.invariant, text: invariantText.replace(/\.$/, "") },
   bug: bugParagraph,

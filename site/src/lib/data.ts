@@ -25,6 +25,7 @@ export interface Demo {
   provenance: Provenance & { seed: string; note: string };
   seed: string;
   seedHex: string;
+  testAccount: string;
   config: { seed: number; steps: number; gas: number; runs: number };
   invariant: { id: number; text: string };
   bug: string;

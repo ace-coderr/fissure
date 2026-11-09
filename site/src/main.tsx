@@ -4,6 +4,8 @@ import App from "./App";
 import "./styles/global.css";
 import "./styles/components.css";
 import "./styles/layout.css";
+import "./styles/replay.css";
+import "./styles/mutants.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

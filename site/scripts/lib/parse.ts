@@ -205,6 +205,7 @@ export interface OriginalRaw {
   next: string[];
   derive: string[];
   candidateReplay: number;
+  testAccount: string;
 }
 
 const MARKER = "4048928990"; // 0xf155c0de
@@ -216,6 +217,7 @@ export function parseOriginal(text: string): OriginalRaw {
   const next: string[] = [];
   const derive: string[] = [];
   let candidateReplay = -1;
+  let testAccount = "";
   for (const line of text.trim().split("\n")) {
     const w = line.trim().split(" ");
     if (w[0] !== MARKER) throw new Error(`capture line without marker: ${line.slice(0, 40)}`);
@@ -224,11 +226,13 @@ export function parseOriginal(text: string): OriginalRaw {
     else if (tag === 11) steps.push({ index: Number(w[2]), variant: Number(w[3]), selector: Number(w[4]), value: w[5], w0: w[6], w1: w[7], w2: w[8], who: Number(w[9]) });
     else if (tag === 12) (w[2] === "1" ? next : derive)[Number(w[3])] = w[4];
     else if (tag === 13) candidateReplay = Number(w[4]);
+    else if (tag === 14) testAccount = w[4];
     else throw new Error(`unknown capture tag ${tag}`);
   }
   if (!meta) throw new Error("capture has no meta record");
   if (steps.length !== meta.originalLen) throw new Error("capture step count does not match the original length");
   if (next.length !== 16 || derive.length !== 8) throw new Error("capture PRNG outputs are incomplete");
   if (candidateReplay < 0) throw new Error("capture has no candidate replay record");
-  return { meta, steps, next, derive, candidateReplay };
+  if (!testAccount) throw new Error("capture has no test account record");
+  return { meta, steps, next, derive, candidateReplay, testAccount };
 }

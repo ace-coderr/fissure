@@ -1,7 +1,7 @@
 {
   "provenance": {
     "codeCommit": "c5a7650c21173a50014746a8360e878ed80cf1f9",
-    "capturedAtCommit": "75fd23e447da9d6e608a3df75f5901f77c603310",
+    "capturedAtCommit": "79ac35afcbb67adafb659378ccd7fb7371136c9e",
     "fe": "fe 26.5.0 (3dab95f)",
     "captured": "2026-11-09",
     "sources": [
@@ -17,6 +17,7 @@
   "contract": "vault_bug",
   "seed": "63943086030706054941702419180308291968568539214185280263325138216467852686274",
   "seedHex": "0x8d5e810ffd8430ed23075d49a909f0c9c9e0d92a3ad97c971e558ecba4cbf3c2",
+  "testAccount": "0xbd770416a3345f91e4b34576cb804a576fa48eb1",
   "config": {
     "seed": 2026,
     "steps": 80,

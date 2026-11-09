@@ -164,7 +164,7 @@
   border-right: 0;
 }
 .tile-num {
-  min-height: calc(9px * 7);
+  min-height: 63px;
   color: var(--ink);
   overflow: hidden;
 }

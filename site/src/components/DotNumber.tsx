@@ -59,8 +59,8 @@ interface Props {
   value: string;
   /** What a screen reader says for the whole number. */
   label: string;
-  /** Cell size in px (one dot). */
-  cell?: number;
+  /** Size of one dot: px, or any CSS length such as a clamp(). */
+  cell?: number | string;
   /** Start rolling immediately instead of when scrolled into view. */
   immediate?: boolean;
   className?: string;
@@ -73,7 +73,7 @@ export function DotNumber({ value, label, cell = 9, immediate = false, className
   const live = immediate || seen || reduced;
   let n = 0;
   return (
-    <span ref={ref} role="img" aria-label={label} className={`dotnum ${className}`} style={{ "--cell": `${cell}px` } as CSSProperties}>
+    <span ref={ref} role="img" aria-label={label} className={`dotnum ${className}`} style={{ "--cell": typeof cell === "number" ? `${cell}px` : cell } as CSSProperties}>
       {[...value].map((ch, i) =>
         ch >= "0" && ch <= "9" ? (
           <Wheel key={i} digit={live ? Number(ch) : 0} delay={150 + n++ * 110} instant={reduced} />

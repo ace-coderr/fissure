@@ -11,7 +11,7 @@ function Tile({ n, value, label, label2, note }: { n: string; value: string; lab
     <li className="tile">
       <Bracket n={n}>{label2}</Bracket>
       <div className="tile-num">
-        <DotNumber value={value} label={`${label}: ${value}`} cell={9} />
+        <DotNumber value={value} label={`${label}: ${value}`} cell="clamp(6px, 0.7vw + 1px, 9px)" />
       </div>
       <p className="tile-label" data-shift="">
         {label}

@@ -1,0 +1,196 @@
+/* ---------- replay view ---------- */
+.replay-top {
+  display: grid;
+  gap: 18px;
+  padding-top: clamp(32px, 5vw, 64px);
+  padding-bottom: clamp(28px, 4vw, 44px);
+  max-width: calc(var(--maxw) - 0px);
+}
+.replay-top .sec-lede {
+  max-width: 70ch;
+}
+.replay {
+  padding-bottom: clamp(48px, 7vw, 88px);
+}
+.replay-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: clamp(24px, 4vw, 48px);
+  align-items: start;
+}
+.replay-side {
+  display: grid;
+  gap: 26px;
+  align-content: start;
+}
+.counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 36px;
+}
+.counter {
+  display: grid;
+  gap: 12px;
+  color: var(--ink);
+}
+.replay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.facts {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+.facts div {
+  display: grid;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ink);
+}
+.facts dt {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rust);
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.seed {
+  font-weight: 500;
+}
+.mini-light {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.mini-light:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* the terminal that plays the replay */
+.replay-term {
+  min-width: 0;
+}
+.replay-body {
+  position: relative;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 330px;
+  line-height: 1.75;
+}
+.replay-body .line {
+  margin: 0;
+}
+.ghost {
+  visibility: hidden;
+}
+.rows {
+  margin: 0;
+}
+.row {
+  max-height: 2.4em;
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    max-height var(--d-slow) var(--ease),
+    opacity var(--d-slow) var(--ease);
+}
+.row.gone {
+  max-height: 0;
+  opacity: 0;
+}
+.row-in {
+  display: grid;
+  grid-template-columns: 3.2em minmax(0, 1fr);
+  gap: 8px;
+  padding-left: 1em;
+}
+.idx,
+.call {
+  transition:
+    translate var(--d-slower) var(--ease),
+    color var(--d-base) var(--ease);
+}
+.call {
+  position: relative;
+}
+.call::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: 0;
+  top: 52%;
+  height: 2px;
+  background: var(--rust-bright);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--d-slow) var(--ease);
+}
+.row.struck .call::after {
+  transform: scaleX(1);
+}
+.row.struck {
+  color: var(--on-dark-soft);
+}
+/* the crack opens: the numbers and the calls part */
+.replay-body.open .idx {
+  translate: -7px 0;
+}
+.replay-body.open .call {
+  translate: 7px 0;
+}
+.replay-crack {
+  position: absolute;
+  top: 40px;
+  bottom: 56px;
+  left: calc(1em + 3.2em + 2px);
+  width: 14px;
+  overflow: visible;
+  pointer-events: none;
+}
+.replay-crack path {
+  fill: none;
+  stroke: var(--rust-bright);
+  stroke-width: 1.4;
+  stroke-linejoin: miter;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset var(--d-slower) var(--ease);
+}
+.replay-crack.open path {
+  stroke-dashoffset: 0;
+}
+
+/* reading notes */
+.notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(20px, 3vw, 40px) clamp(24px, 4vw, 56px);
+}
+.notes li {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding-top: 14px;
+  border-top: 2px solid var(--ink);
+}
+.notes strong {
+  font-weight: 700;
+}
+.words {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .replay-grid {
+    grid-template-columns: 1fr;
+  }
+  .notes {
+    grid-template-columns: 1fr;
+  }
+}

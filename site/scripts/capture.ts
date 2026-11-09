@@ -166,6 +166,7 @@ fn zz_site_capture() uses (evm: mut Evm) {
     cand.push(run.steps[2])
     cand.push(run.steps[3])
     evm.emit(Out { marker: 0xf155c0de, tag: 13, kind: 3, index: 0, value: replay<BugVault>(cand, 300000, 5_000_000) })
+    evm.emit(Out { marker: 0xf155c0de, tag: 14, kind: 4, index: 0, value: evm.address().word() })
     var p = Prng::seeded(h.seed)
     var k: u256 = 0
     while k < 16 {
