@@ -16,3 +16,10 @@ fn coolcoin_survives_long_runs() uses (evm: mut Evm) {
     let h = hunt<Erc20Suite<Original>>(Config { seed: 99, steps: 150, gas: 400000 }, 4)
     assert!(!h.found)
 }
+
+/// A hunt bigger than the test's gas budget stops with `OutOfBudget` (checked
+/// by name in docs/audit.md), not with an empty revert or a halted test.
+#[test(should_revert)]
+fn a_hunt_beyond_the_budget_stops_cleanly() uses (evm: mut Evm) {
+    let _ = check<Erc20Suite<Original>>(Config { seed: 1, steps: 100, gas: 400000 }, 60)
+}

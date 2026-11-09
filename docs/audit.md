@@ -93,3 +93,71 @@ fail, the original sequence is returned with `reproduced = false`.
   only at codegen (see `compiler-notes.md`).
 - The audit was done by the author with an AI assistant. It has not been
   reviewed by anyone else.
+
+
+---
+
+# Round 2 (step 7: a real contract and mutants)
+
+Done after running Fissure on the CoolCoin ERC-20 and 11 seeded mutants
+(`docs/mutation.md`). Regression tests: `src/gen_tests.fe` (domains),
+`src/third_party/coolcoin/mutation_tests.fe` and `fuzz_tests.fe`.
+
+## Findings (fixed)
+
+### 4. The shrinker left the generators' domain and drifted to a different failure (real bug)
+
+Shrinking tried the values 0, 1 and half for every word. For an address word
+that produced `address(1)`, which no generator ever makes. On the ERC-20 the
+shrunk calls for three mutants ended in `transferFrom(.., to = 1, ..)` and
+failed because the harness did not know that account, not because of the
+seeded bug; the invariant id was the same, so the shrinker accepted it. The
+reported "minimal" sequence did not show the bug.
+
+Fix: each generator proposes its own simpler values (`Generator::simpler`), kept
+inside what it can produce (an actor shrinks to a lower actor, the sender, or
+the zero address; the sender stays the sender). After the fix, mutant 8 shrinks
+to a real self-transfer, which its test asserts.
+
+Remaining weakness, not fixable by id comparison: dropping calls can also move to
+a different cause behind the same invariant id.
+
+### 5. A test running out of gas failed with an empty revert
+
+`fe test` gives each test a fixed gas budget and Fe never frees memory. At
+`-O 0` (more gas per operation) one mutant hunt ran dry, and the visible symptom
+was `Test reverted: 0x` from a failed `create`, with no hint why. Fix: the runner
+checks the remaining gas before every deployment and reverts with
+`OutOfBudget { gas_left }` while it can still say so (decoded by the report
+script). Measured: one run of 20000 vault calls or 3000 ERC-20 calls fits;
+4000 ERC-20 calls spread over a hunt did not. The mutation results hold at the
+default optimisation level (CI); at `-O 0` mutant 11 reports `OutOfBudget`.
+
+## Harness mistakes found by running on a real contract (my invariants, not Fissure or CoolCoin)
+
+A zero-amount `transferFrom` from a stranger is legal, and balances above 2^128
+are legal. Both were wrongly flagged by my first invariants; details in
+`docs/mutation.md`.
+
+## Checked, nothing wrong found
+
+| Concern | Result |
+| --- | --- |
+| Determinism with the new hooks | Mutation results identical across repeated runs and `-O 1`/`-O 2` (`-O 0` runs out of budget for mutant 11 only, see finding 5) |
+| Control mutant | Mutant 0 (the mutation machinery, no bug) is clean, and accepts as many calls as the unmodified contract |
+| Replay uses the same hooks as the run | `replay` calls `snapshot` and `check_step` exactly as `fuzz` does; shrunk ERC-20 sequences replay to the same invariant |
+| Equivalent mutant | Mutant 3 behaves exactly like the original (same accepted-call count); correctly not reported |
+
+## Known limits added in round 2
+
+- **One sender** is why mutants 9 and 10 are missed; relay actors would fix it
+  (`docs/multi-sender-spike.md`, not built).
+- **Logs are invisible to invariants**, hence mutant 4.
+- **Seeds depend on the test account's address** for harnesses that use `Sender`
+  or `Holder` (the address is part of the generated words). It was the same in
+  all my local runs; it was not separately checked in CI.
+- **Shrinking halves a word at most 12 times per round**, so big values are
+  reduced, not minimised (mutant 11's allowance).
+- **Mutation evidence is small**: 11 mutants chosen by the author.
+- **Third-party contract**: the CoolCoin source was copied from a web page whose
+  license is not stated on the page (see SUBMISSION.md).

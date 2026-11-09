@@ -84,6 +84,24 @@ pub struct InvariantBroken { pub seed: u256, pub at: u256, pub invariant: u256 }
 #[error]
 pub struct Underfunded { pub have: u256, pub need: u256 }
 
+/// The test is running out of gas, and with it the room to deploy and call.
+/// `fe test` gives a test a fixed gas budget (memory counts: Fe never frees it),
+/// and unoptimised builds spend it faster. Lower `steps` or the number of runs.
+#[error]
+pub struct OutOfBudget { pub gas_left: u256 }
+
+/// Gas that must remain before a deployment or a run starts.
+pub const MIN_GAS_LEFT: u256 = 60_000_000
+
+/// Fail clearly while there is still gas to say so, instead of dying later with
+/// an empty revert from a failed `create`.
+pub fn require_budget() uses (evm: Evm) {
+    let left = evm.gas()
+    if left < MIN_GAS_LEFT {
+        revert_error(OutOfBudget { gas_left: left })
+    }
+}
+
 /// Fail loudly, up front, if the sender could run out of ether mid-run.
 fn require_funds<H: Harness>(_ calls: u256) uses (evm: Evm) {
     let need = calls * H::Calls::MAX_VALUE
@@ -116,6 +134,7 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
         revert_error(EmptyMenu {})
     }
     require_funds<H>(cfg.steps)
+    require_budget()
     let target = H::deploy(salt)
     var run = Run {
         broken: 0,
@@ -171,6 +190,7 @@ pub fn replay<H: Harness>(_ steps: MemVec<Step>, _ gas: u256, _ salt: u256) -> u
 uses (evm: mut Evm)
 {
     require_funds<H>(steps.len() as u256)
+    require_budget()
     let target = H::deploy(salt)
     let pre = H::check(target)
     if pre != 0 { return pre }

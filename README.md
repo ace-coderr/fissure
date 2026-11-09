@@ -76,9 +76,13 @@ crashed test. `docs/spike.md` records how this was found and what else was tried
   accepted (`Vacuous`), if a menu entry was never accepted (`Unreached`), if the
   menu is empty (`EmptyMenu`), or if the sender cannot afford the run
   (`Underfunded`).
-- **Audited.** `docs/audit.md` lists what was tried to break it, one real bug
-  found and fixed (seeds that did not reproduce), and what remains unfixed.
-- **51 Fe tests**, `fe fmt --check` clean, CI green.
+- **Audited twice.** `docs/audit.md` lists what was tried to break it, the real
+  bugs found and fixed (seeds that did not reproduce; a shrinker that drifted to
+  a different failure), and what remains unfixed.
+- **Tried on a real contract and on mutants.** The Fe Guide's ERC-20 (third-party)
+  has 11 seeded bugs: 7 caught and shrunk to 1-2 calls, 4 missed for stated
+  reasons (`docs/mutation.md`).
+- **73 Fe tests**, `fe fmt --check` clean, CI green.
 
 ## Originality
 
@@ -98,7 +102,11 @@ the shape of bug it targets: a vault that is correct on every path except a
 and reduces the failing run to the two calls that matter. A measured example of
 why typed generators matter: on the correct vault, plain small-integer arguments
 revert 67.2% of calls; typed generators revert 13.0%, and the rest are the
-contract's own guards (`docs/revert-rate.md`).
+contract's own guards (`docs/revert-rate.md`). On a real ERC-20 (the Fe Guide's
+CoolCoin, third-party) Fissure found nothing in the unmodified contract (after
+I fixed two mistakes in my own invariants), and with 11 seeded bugs it caught 7
+and missed 4: one is equivalent, one needs log inspection, two need a second
+sender (`docs/mutation.md`). Small evidence, honestly reported.
 
 ## Documentation and demo
 
@@ -188,6 +196,8 @@ balance +/- 1, max) and `Pay` (value to attach).
 | `src/shrink.fe` | the shrinker: cut after failure, drop chunks, simplify words |
 | `src/hunt.fe` | many seeds, shrink the first failure, events and `Failure` error, `check` |
 | `src/vault_ok.fe`, `src/vault_bug.fe` | the demo contracts |
+| `src/third_party/coolcoin.fe` | the Fe Guide's ERC-20, **third-party, unmodified logic** |
+| `src/third_party/coolcoin/` | our harness, invariants, 11 mutants and tests for it |
 | `src/*_tests.fe` | unit tests, demo tests, audit regressions |
 | `scripts/fissure-report.mjs` | Node: decodes events and errors from `fe test` output (docs tooling only) |
 
@@ -213,7 +223,8 @@ needed; the library has no dependencies.
   Dynamic types (`bytes`, `string`, arrays) get only a zero head word, so they
   are not generated meaningfully (not yet tried on a contract that takes one).
 - One sender at a fixed timestamp: `fe test` has no caller or time cheat codes,
-  so bugs that need time to pass or several actors are out of reach. The demo
+  so bugs that need time to pass or several actors are out of reach (relay
+  contracts could add senders: `docs/multi-sender-spike.md`, not built). The demo
   vault uses a zero lock period for this reason.
 - You list the messages yourself; `msg` blocks cannot be enumerated.
 - Shrinking is greedy: results are locally minimal, not proven globally minimal.
@@ -222,11 +233,20 @@ needed; the library has no dependencies.
 - `fe test` shows logs only for passing tests, so a failing test carries its
   report in revert data (hex), decoded by the Node script; there it labels calls
   by menu index, not function name.
+- Invariants cannot see emitted events, so a wrong event is invisible to them.
+- A test has a fixed gas budget and Fe never frees memory: roughly 20000 vault
+  calls or 3000 ERC-20 calls fit in one run, fewer in a long hunt, and fewer at
+  `-O 0`. Fissure stops with `OutOfBudget` before running dry.
+- Seeds are reproducible in the same environment; for harnesses that name the
+  sender (`Sender`, `Holder`) the generated words include the test account's
+  address.
+- Shrinking compares invariant ids only, so dropping calls can still land on a
+  different cause behind the same id; word values are reduced, not minimised.
 - The PRNG is chosen for determinism, not tested for statistical quality.
 - Only the default EVM test backend is supported (native tests cannot use
   balances or logs).
-- Tested on the two demo vaults and unit tests; not yet on a large real-world
-  contract. The audit was done by the author with AI assistance and has had no
+- Tested on the two demo vaults, one third-party ERC-20 with 11 mutants, and unit
+  tests; not on a large real-world contract. The audit was done by the author with AI assistance and has had no
   independent review.
 
 ## Declaration
@@ -238,10 +258,13 @@ needed; the library has no dependencies.
   endings enforced. It contains the time-locked vault, its three tests, the CI
   workflow, the license and the submission template. Everything else was written
   during the contest.
-- **Third-party code:** none copied. `vault_ok.fe` adapts the starter vault and
-  `vault_bug.fe` adapts that. The PRNG uses the published SplitMix mixing
-  constants; the Keccak-256 in the Node script is our implementation of the
-  public algorithm.
+- **Third-party code:** the Fe Guide's CoolCoin ERC-20
+  (`src/third_party/coolcoin.fe`, https://fe-lang.org/examples/erc20/, Fe
+  project; the page states no license, the Fe repository is Apache-2.0), copied
+  with only a header and `fe fmt`; `src/third_party/coolcoin/mutant.fe` is a
+  derivative of it. `vault_ok.fe` adapts the starter vault and `vault_bug.fe`
+  adapts that. The PRNG uses the published SplitMix mixing constants; the
+  Keccak-256 in the Node script is our implementation of the public algorithm.
 - **AI assistance:** see [SUBMISSION.md](SUBMISSION.md).
 
 ## Team

@@ -86,6 +86,7 @@ const ERRORS = {
   [keccak256("InvariantBroken(uint256,uint256,uint256)").slice(0, 8)]: "InvariantBroken",
   [keccak256("Underfunded(uint256,uint256)").slice(0, 8)]: "Underfunded",
   [keccak256("Unreached(uint256)").slice(0, 8)]: "Unreached",
+  [keccak256("OutOfBudget(uint256)").slice(0, 8)]: "OutOfBudget",
   "08c379a0": "Error",
 };
 
@@ -170,6 +171,10 @@ for (const line of text.split(/\r?\n/)) {
       any = true;
       console.log(`
 ${test}: UNDERFUNDED - the sender holds ${w[0]} wei but needs ${w[1]}; raise the test's balance`);
+    } else if (name === "OutOfBudget") {
+      any = true;
+      console.log(`
+${test}: OUT OF BUDGET - only ${words(body)[0]} gas left; use fewer steps or runs (unoptimised builds spend more)`);
     } else if (name === "Unreached") {
       any = true;
       console.log(`
