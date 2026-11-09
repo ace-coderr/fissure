@@ -26,7 +26,7 @@ Fissure runs inside `fe test`, in Fe, with no external tooling.
 4. It reports the seed, the shrunk calls and the broken invariant.
 
 Built during the contest: everything under `src/` except the vault's original
-logic, plus `scripts/` and `docs/` (see Declaration).
+logic, plus `scripts/`, `docs/` and the project site in `site/` (see Declaration).
 
 ## Fe highlight
 
@@ -226,6 +226,7 @@ balance, balance +/- 1, max) and `Pay` (value to attach); you can write your own
 | `src/third_party/coolcoin/` | our harnesses (single- and multi-sender), invariants, 11 mutants and tests for them |
 | `src/*_tests.fe` | unit tests, demo tests, audit regressions |
 | `scripts/fissure-report.mjs` | Node: decodes events and errors from `fe test` output (docs tooling only) |
+| `site/` | the project site (Vite, React, TypeScript): no Fe code; every number on it is generated from this repository's own test output and docs (`docs/site-audit.md`) |
 
 ## Build and test
 
