@@ -208,3 +208,22 @@ Everything that produces or judges calls is frozen at commit
 
 Check with `git hash-object <file>` at any later commit. If a later commit changes
 one of these files, this table says so below.
+
+### 9b. New mutants, and my predictions (written before any run)
+
+Six mutants of kinds not covered by 1-11, written after the freeze in
+`src/third_party/coolcoin/mutant.fe` (ids 12-17), with the verdicts I expect from
+reading the harnesses. They are committed before the first run so the order is on
+record in git.
+
+| Mutant | The seeded bug | Kind | Predicted: single, generic | Predicted: relays, generic | Predicted: relays, tuned |
+| --- | --- | --- | --- | --- | --- |
+| 12 | a transfer of more than 500 tokens credits one token too few | hidden fee on a value threshold | caught (amount > 500 occurs) | caught | caught |
+| 13 | `approve` for the actor `0x1002` is silently not stored | one specific address mishandled | caught (single harness tracks every spender) | missed (multi harness tracks allowances between senders only) | missed |
+| 14 | `decreaseAllowance` leaves one token too many | off-by-one in allowance arithmetic | caught | caught | caught |
+| 15 | `mint` does not raise the total supply | supply bookkeeping | caught | caught | caught |
+| 16 | `burnFrom` does not spend any allowance | missing authorisation | missed (needs a second sender) | caught if the generators produce the case | caught if produced |
+| 17 | `increaseAllowance` overwrites instead of adding | wrong arithmetic in a helper | caught | caught | caught |
+
+I have not run any of these when writing this table.
+

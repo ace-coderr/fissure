@@ -90,7 +90,11 @@ pub contract MutCoin uses (ctx: mut Ctx, log: mut Log) {
         }
 
         BurnFrom { from, amount } -> bool uses (ctx, mut store, mut log) {
-            store.spend_allowance(owner: from, spender: ctx.caller(), amount)
+            // Mutant 16: burnFrom does not spend any allowance, so anyone can burn
+            // anyone's tokens.
+            if store.mutant != 16 {
+                store.spend_allowance(owner: from, spender: ctx.caller(), amount)
+            }
             store.burn(from, amount)
             true
         }
@@ -100,7 +104,13 @@ pub contract MutCoin uses (ctx: mut Ctx, log: mut Log) {
         {
             let owner = ctx.caller()
             let current = store.allowances.get(key: (owner, spender))
-            store.approve(owner, spender, amount: current + added_value)
+            // Mutant 17: increaseAllowance sets the allowance to the added value
+            // instead of adding to it.
+            var raised = current + added_value
+            if store.mutant == 17 {
+                raised = added_value
+            }
+            store.approve(owner, spender, amount: raised)
             true
         }
 
@@ -113,7 +123,12 @@ pub contract MutCoin uses (ctx: mut Ctx, log: mut Log) {
                 current >= subtracted_value,
                 "decreased allowance below zero",
             )
-            store.approve(owner, spender, amount: current - subtracted_value)
+            // Mutant 14: decreaseAllowance leaves one token too many (off by one).
+            var lowered = current - subtracted_value
+            if store.mutant == 14 {
+                lowered = lowered + 1
+            }
+            store.approve(owner, spender, amount: lowered)
             true
         }
     }
@@ -147,6 +162,12 @@ impl MutStore {
             credit = amount - 1
         }
 
+        // Mutant 12: a transfer of more than 500 tokens credits one token too few
+        // (a hidden fee).
+        if self.mutant == 12 && amount > 500 {
+            credit = credit - 1
+        }
+
         if self.mutant == 8 {
             // Mutant 8: the recipient's balance is read before the debit, so a
             // self-transfer credits on top of the old balance.
@@ -174,7 +195,10 @@ impl MutStore {
             assert!(to != Address::zero(), "mint to zero address")
         }
 
-        self.total_supply += amount
+        // Mutant 15: minting does not raise the total supply.
+        if self.mutant != 15 {
+            self.total_supply += amount
+        }
         self.balances.set(key: to, value: self.balances.get(key: to) + amount)
 
         log.emit(
@@ -210,7 +234,10 @@ impl MutStore {
         if self.mutant == 5 {
             value = self.allowances.get(key: (owner, spender)) + amount
         }
-        self.allowances.set(key: (owner, spender), value)
+        // Mutant 13: an approval for the actor 0x1002 is silently not stored.
+        if !(self.mutant == 13 && spender == Address::new(0x1002)) {
+            self.allowances.set(key: (owner, spender), value)
+        }
 
         log.emit(event: Approval { owner, spender, value })
     }
