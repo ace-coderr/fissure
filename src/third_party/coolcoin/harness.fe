@@ -1,0 +1,336 @@
+//! Fissure harness for the CoolCoin ERC-20 (the Fe Guide example next door).
+//!
+//! The target is deployed by a `Deploy` type, so the same menu and invariants
+//! run on the unmodified contract and on every mutant (see `mutant.fe`).
+//!
+//! Known accounts (every address the menu can name): the sender, the zero
+//! address and four actors. They are all the places tokens can be, so the
+//! snapshot below describes the complete state.
+//!
+//! Snapshot layout (13 words): [0] total supply; [1..=6] balance of each known
+//! account; [7..=12] allowance the sender granted to each known account.
+
+use core::ptr::MemVec
+use ingot::gen::{Amount, Holder, Zero}
+use ingot::menu::{Call, Call1, Call2, Cons, Nil, Step}
+use ingot::prng::WORD_MAX
+use ingot::runner::Harness
+use super::{CoolCoin, Erc20, Erc20Extended}
+
+pub trait Deploy {
+    fn deploy() -> Address uses (evm: mut Evm)
+}
+
+/// The unmodified guide contract.
+pub struct Original {}
+
+impl Deploy for Original {
+    fn deploy() -> Address uses (evm: mut Evm) {
+        evm.create<CoolCoin>(value: Wei::zero(), args: (INITIAL_SUPPLY, evm.address()))
+    }
+}
+
+pub const INITIAL_SUPPLY: u256 = 1000
+
+// Menu entry indices, in the order of `Erc20Calls`.
+const TRANSFER: u256 = 0
+const APPROVE: u256 = 1
+const TRANSFER_FROM: u256 = 2
+const MINT: u256 = 3
+const BURN: u256 = 4
+const BURN_FROM: u256 = 5
+const INCREASE: u256 = 6
+const DECREASE: u256 = 7
+
+/// Invariant ids reported by `check` / `check_step`.
+pub const INV_CONSERVATION: u256 = 1
+pub const INV_ZERO_ADDRESS_EMPTY: u256 = 2
+pub const INV_FAILED_CALL_CHANGES_STATE: u256 = 3
+pub const INV_SUPPLY_CHANGED_WITHOUT_MINT_BURN: u256 = 4
+pub const INV_BALANCES_MOVE_EXACTLY: u256 = 5
+pub const INV_ALLOWANCE_WRONG: u256 = 6
+pub const INV_ALLOWANCE_NOT_SPENT: u256 = 7
+pub const INV_MINT_WRONG: u256 = 8
+pub const INV_BURN_WRONG: u256 = 9
+
+pub type Erc20Calls = Cons<
+    Call2<Erc20::Transfer, Zero, Holder, Amount>,
+    Cons<
+        Call2<Erc20::Approve, Zero, Holder, Amount>,
+        Cons<
+            Call<Erc20::TransferFrom, Zero, Holder, Holder, Amount>,
+            Cons<
+                Call2<Erc20Extended::Mint, Zero, Holder, Amount>,
+                Cons<
+                    Call1<Erc20Extended::Burn, Zero, Amount>,
+                    Cons<
+                        Call2<Erc20Extended::BurnFrom, Zero, Holder, Amount>,
+                        Cons<
+                            Call2<Erc20Extended::IncreaseAllowance, Zero, Holder, Amount>,
+                            Cons<
+                                Call2<Erc20Extended::DecreaseAllowance, Zero, Holder, Amount>,
+                                Nil,
+                            >,
+                        >,
+                    >,
+                >,
+            >,
+        >,
+    >,
+>
+
+pub struct Erc20Suite<D> {}
+
+fn balance_of(_ token: Address, _ who: u256) -> u256 uses (evm: mut Evm) {
+    evm.call(
+        addr: token,
+        gas: 100000,
+        value: Wei::zero(),
+        message: Erc20::BalanceOf { account: Address::from_word_truncate(who) },
+    )
+}
+
+fn allowance_of(_ token: Address, _ spender: u256) -> u256 uses (evm: mut Evm) {
+    evm.call(
+        addr: token,
+        gas: 100000,
+        value: Wei::zero(),
+        message: Erc20::Allowance {
+            owner: evm.address(),
+            spender: Address::from_word_truncate(spender),
+        },
+    )
+}
+
+fn total_supply(_ token: Address) -> u256 uses (evm: mut Evm) {
+    evm.call(
+        addr: token,
+        gas: 100000,
+        value: Wei::zero(),
+        message: Erc20::TotalSupply {},
+    )
+}
+
+/// The known account at position `i`: 0 sender, 1 zero address, 2..=5 actors.
+fn account(_ i: u256) -> u256 uses (evm: Evm) {
+    if i == 0 {
+        return evm.address().word()
+    }
+    if i == 1 { return 0 }
+    0x1000 + (i - 2)
+}
+
+/// Position of `word` among the known accounts, or 99 if it is none of them.
+fn position(_ word: u256) -> u256 uses (evm: Evm) {
+    var i: u256 = 0
+    while i < 6 {
+        if account(i) == word {
+            return i
+        }
+        i = i + 1
+    }
+    99
+}
+
+/// `after == before + amount`, without overflowing.
+fn rose_by(_ after: u256, _ before: u256, _ amount: u256) -> bool {
+    after >= before && after - before == amount
+}
+
+/// `after == before - amount`, without underflowing.
+fn fell_by(_ after: u256, _ before: u256, _ amount: u256) -> bool {
+    before >= after && before - after == amount
+}
+
+fn same_words(_ a: MemVec<u256>, _ b: MemVec<u256>) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    var i: usize = 0
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}
+
+/// Balances after a transfer of `amount` from `from_pos` to `to_pos`.
+fn moved_exactly(
+    _ before: MemVec<u256>,
+    _ after: MemVec<u256>,
+    _ from_pos: u256,
+    _ to_pos: u256,
+    _ amount: u256,
+) -> bool {
+    if from_pos > 5 || to_pos > 5 {
+        return false
+    }
+    if from_pos == to_pos {
+        return after[(1 + from_pos) as usize] == before[(1 + from_pos) as usize]
+    }
+    fell_by(
+            after[(1 + from_pos) as usize],
+            before[(1 + from_pos) as usize],
+            amount,
+        )
+        && rose_by(
+            after[(1 + to_pos) as usize],
+            before[(1 + to_pos) as usize],
+            amount,
+        )
+}
+
+fn snapshot_of(_ token: Address) -> MemVec<u256> uses (evm: mut Evm) {
+    var s = MemVec<u256>::with_capacity(13)
+    s.push(total_supply(token))
+    var i: u256 = 0
+    while i < 6 {
+        s.push(balance_of(token, account(i)))
+        i = i + 1
+    }
+    i = 0
+    while i < 6 {
+        s.push(allowance_of(token, account(i)))
+        i = i + 1
+    }
+    s
+}
+
+impl<D> Harness for Erc20Suite<D> where D: Deploy {
+    type Calls = Erc20Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        D::deploy()
+    }
+
+    /// Generators aim at the sender's token balance, not at ether.
+    fn aim(_ token: Address) -> u256 uses (evm: mut Evm) {
+        balance_of(token, evm.address().word())
+    }
+
+    fn snapshot(_ token: Address) -> MemVec<u256> uses (evm: mut Evm) {
+        snapshot_of(token)
+    }
+
+    fn check(_ token: Address) -> u256 uses (evm: mut Evm) {
+        let s = snapshot_of(token)
+        var sum: u256 = 0
+        var i: usize = 1
+        while i <= 6 {
+            // The balances can never add up to more than the supply, and the
+            // supply is at most the largest word, so a sum that would overflow
+            // is itself a broken conservation.
+            if s[i] > WORD_MAX - sum {
+                return INV_CONSERVATION
+            }
+            sum = sum + s[i]
+            i = i + 1
+        }
+        if sum != s[0] {
+            return INV_CONSERVATION
+        }
+        if s[2] != 0 {
+            return INV_ZERO_ADDRESS_EMPTY
+        }
+        0
+    }
+
+    fn check_step(_ token: Address, _ before: MemVec<u256>, _ step: Step, _ accepted: bool) -> u256
+    uses (evm: mut Evm)
+    {
+        let after = snapshot_of(token)
+        if !accepted {
+            if !same_words(before, after) {
+                return INV_FAILED_CALL_CHANGES_STATE
+            }
+            return 0
+        }
+        let v = step.variant
+        let mints_or_burns = v == MINT || v == BURN || v == BURN_FROM
+        if after[0] != before[0] && !mints_or_burns {
+            return INV_SUPPLY_CHANGED_WITHOUT_MINT_BURN
+        }
+        if v == TRANSFER {
+            if !moved_exactly(before, after, 0, position(step.w0), step.w1) {
+                return INV_BALANCES_MOVE_EXACTLY
+            }
+        } else if v == APPROVE {
+            let p = position(step.w0)
+            if p > 5 || after[(7 + p) as usize] != step.w1 {
+                return INV_ALLOWANCE_WRONG
+            }
+        } else if v == TRANSFER_FROM {
+            // A zero amount moves nothing and may name any `from`; it must
+            // leave the whole state unchanged.
+            if step.w2 == 0 {
+                if !same_words(before, after) {
+                    return INV_BALANCES_MOVE_EXACTLY
+                }
+                return 0
+            }
+            // Only the sender ever approves anyone, so `from` must be the sender.
+            if position(step.w0) != 0 {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if !fell_by(after[7], before[7], step.w2) {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if !moved_exactly(before, after, 0, position(step.w1), step.w2) {
+                return INV_BALANCES_MOVE_EXACTLY
+            }
+        } else if v == MINT {
+            let p = position(step.w0)
+            if p > 5 {
+                return INV_MINT_WRONG
+            }
+            if !rose_by(after[0], before[0], step.w1) {
+                return INV_MINT_WRONG
+            }
+            if !rose_by(
+                after[(1 + p) as usize],
+                before[(1 + p) as usize],
+                step.w1,
+            ) {
+                return INV_MINT_WRONG
+            }
+        } else if v == BURN {
+            if !fell_by(after[0], before[0], step.w0) || !fell_by(after[1], before[1], step.w0) {
+                return INV_BURN_WRONG
+            }
+        } else if v == BURN_FROM {
+            if step.w1 == 0 {
+                if !same_words(before, after) {
+                    return INV_BURN_WRONG
+                }
+                return 0
+            }
+            if position(step.w0) != 0 || !fell_by(after[7], before[7], step.w1) {
+                return INV_ALLOWANCE_NOT_SPENT
+            }
+            if !fell_by(after[0], before[0], step.w1) || !fell_by(after[1], before[1], step.w1) {
+                return INV_BURN_WRONG
+            }
+        } else if v == INCREASE {
+            let p = position(step.w0)
+            if p > 5 || !rose_by(
+                    after[(7 + p) as usize],
+                    before[(7 + p) as usize],
+                    step.w1,
+                ) {
+                return INV_ALLOWANCE_WRONG
+            }
+        } else if v == DECREASE {
+            let p = position(step.w0)
+            if p > 5 || !fell_by(
+                    after[(7 + p) as usize],
+                    before[(7 + p) as usize],
+                    step.w1,
+                ) {
+                return INV_ALLOWANCE_WRONG
+            }
+        }
+        0
+    }
+}

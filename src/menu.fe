@@ -32,6 +32,8 @@ pub type Call2<M, V, A0, A1> = Call<M, V, A0, A1, Zero>
 pub type Untyped<M> = Call<M, SmallWord, SmallWord, SmallWord, SmallWord>
 
 pub trait Entry {
+    const MAX_VALUE: u256
+
     fn draw<R: Draw>(_ env: Env, _ rng: mut R) -> Step
     fn selector() -> u256
     fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool
@@ -40,6 +42,8 @@ pub trait Entry {
 
 impl<M, V, A0, A1, A2> Entry for Call<M, V, A0, A1, A2>
 where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Generator {
+    const MAX_VALUE: u256 = V::MAX_VALUE
+
     fn draw<R: Draw>(_ env: Env, _ rng: mut R) -> Step {
         let value = V::generate(env, mut rng)
         let w0 = A0::generate(env, mut rng)
@@ -84,6 +88,8 @@ pub struct Cons<H, T> {}
 /// A type-level list of `Entry` types.
 pub trait Menu {
     const LEN: u256
+    /// The most native value any entry can attach to one call.
+    const MAX_VALUE: u256
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step
     fn selector_at(_ i: u256) -> u256
     fn fire_at(_ i: u256, _ target: Address, _ gas: u256, _ step: Step) -> bool
@@ -92,6 +98,7 @@ pub trait Menu {
 
 impl Menu for Nil {
     const LEN: u256 = 0
+    const MAX_VALUE: u256 = 0
 
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step {
         Step { variant: 0, value: 0, w0: 0, w1: 0, w2: 0 }
@@ -110,6 +117,11 @@ impl Menu for Nil {
 
 impl<H, T> Menu for Cons<H, T> where H: Entry, T: Menu {
     const LEN: u256 = 1 + T::LEN
+    const MAX_VALUE: u256 = if H::MAX_VALUE > T::MAX_VALUE {
+        H::MAX_VALUE
+    } else {
+        T::MAX_VALUE
+    }
 
     fn draw_at<R: Draw>(_ i: u256, _ env: Env, _ rng: mut R) -> Step {
         if i == 0 {

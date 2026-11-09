@@ -13,9 +13,15 @@ use ingot::prng::{Draw, WORD_MAX}
 pub struct Env {
     /// Native balance currently held by the contract under test.
     pub target_balance: u256,
+    /// The account that sends every call (the test account), as an ABI word.
+    pub sender: u256,
 }
 
 pub trait Generator {
+    /// The most native value this generator can attach to a call. Only value
+    /// generators set it; the runner uses it to check the sender can afford a run.
+    const MAX_VALUE: u256 = 0
+
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256
 }
 
@@ -36,6 +42,32 @@ pub struct SmallWord {}
 impl Generator for SmallWord {
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
         rng.below(4)
+    }
+}
+
+/// The account that sends the calls: the way to name "myself" in an argument,
+/// for example the `from` of a `transferFrom` the sender can actually perform.
+pub struct Sender {}
+
+impl Generator for Sender {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        env.sender
+    }
+}
+
+/// Any account a call may reasonably name: the sender (half the time), one of
+/// the four actors, or the zero address (one in eight) to probe zero-address
+/// checks.
+pub struct Holder {}
+
+impl Generator for Holder {
+    fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
+        let pick = rng.below(8)
+        if pick == 0 { return 0 }
+        if pick <= 4 {
+            return env.sender
+        }
+        0x1000 + rng.below(4)
     }
 }
 
@@ -106,6 +138,8 @@ pub const MAX_CALL_VALUE: u256 = 10_000_000_000_000_000_000
 pub struct Pay {}
 
 impl Generator for Pay {
+    const MAX_VALUE: u256 = MAX_CALL_VALUE
+
     fn generate<R: Draw>(_ env: Env, _ rng: mut R) -> u256 {
         let pick = rng.below(6)
         if pick == 0 { return 0 }

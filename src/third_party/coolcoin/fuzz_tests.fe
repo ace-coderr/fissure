@@ -1,0 +1,18 @@
+//! Fissure run against the UNMODIFIED CoolCoin ERC-20.
+
+use ingot::hunt::{check, hunt}
+use ingot::runner::Config
+use super::harness::{Erc20Suite, Original}
+
+#[test]
+fn coolcoin_survives_fuzzing() uses (evm: mut Evm) {
+    let accepted = check<Erc20Suite<Original>>(Config { seed: 1, steps: 60, gas: 400000 }, 10)
+    assert!(accepted > 200)
+}
+
+/// More seeds, longer runs.
+#[test]
+fn coolcoin_survives_long_runs() uses (evm: mut Evm) {
+    let h = hunt<Erc20Suite<Original>>(Config { seed: 99, steps: 150, gas: 400000 }, 4)
+    assert!(!h.found)
+}

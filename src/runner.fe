@@ -6,7 +6,7 @@
 //! `mut`, never ambient state.
 
 use core::ptr::MemVec
-use ingot::gen::{Env, MAX_CALL_VALUE}
+use ingot::gen::Env
 use ingot::menu::{Menu, Step}
 use ingot::prng::{Draw, Prng}
 use std::evm::effects::revert_error
@@ -19,6 +19,28 @@ pub trait Harness {
 
     fn deploy(_ salt: u256) -> Address uses (evm: mut Evm)
     fn check(_ target: Address) -> u256 uses (evm: mut Evm)
+
+    /// What generators such as `Amount` treat as the target's "current
+    /// balance". Defaults to its native balance; a token overrides it with a
+    /// token balance. Read the target's own state only.
+    fn aim(_ target: Address) -> u256 uses (evm: mut Evm) {
+        evm.balance(target).as_wei()
+    }
+
+    /// Words describing the target's state, taken before every call and handed
+    /// to `check_step` afterwards. Defaults to nothing.
+    fn snapshot(_ target: Address) -> MemVec<u256> uses (evm: mut Evm) {
+        MemVec<u256>::new()
+    }
+
+    /// A property of one transition: called after every call with the state
+    /// from before it, the call, and whether the callee accepted it. Returns 0
+    /// if it holds, otherwise an invariant id (distinct from `check`'s ids).
+    fn check_step(_ target: Address, _ before: MemVec<u256>, _ step: Step, _ accepted: bool) -> u256
+    uses (evm: mut Evm)
+    {
+        0
+    }
 }
 
 pub struct Config {
@@ -63,8 +85,8 @@ pub struct InvariantBroken { pub seed: u256, pub at: u256, pub invariant: u256 }
 pub struct Underfunded { pub have: u256, pub need: u256 }
 
 /// Fail loudly, up front, if the sender could run out of ether mid-run.
-fn require_funds(_ calls: u256) uses (evm: Evm) {
-    let need = calls * MAX_CALL_VALUE
+fn require_funds<H: Harness>(_ calls: u256) uses (evm: Evm) {
+    let need = calls * H::Calls::MAX_VALUE
     let have = evm.balance(evm.address()).as_wei()
     if have < need {
         revert_error(Underfunded { have, need })
@@ -82,8 +104,8 @@ pub fn zeros(_ n: u256) -> MemVec<u256> {
     v
 }
 
-fn world(_ target: Address) -> Env uses (evm: Evm) {
-    Env { target_balance: evm.balance(target).as_wei() }
+fn world<H: Harness>(_ target: Address) -> Env uses (evm: mut Evm) {
+    Env { target_balance: H::aim(target), sender: evm.address().word() }
 }
 
 /// Deploy a fresh target and make `cfg.steps` random calls, checking the
@@ -93,7 +115,7 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
     if len == 0 {
         revert_error(EmptyMenu {})
     }
-    require_funds(cfg.steps)
+    require_funds<H>(cfg.steps)
     let target = H::deploy(salt)
     var run = Run {
         broken: 0,
@@ -115,9 +137,10 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
     while i < cfg.steps {
         var rng = Prng::seeded(Prng::derive(cfg.seed, i))
         let which = rng.below(len)
-        var step = H::Calls::draw_at(which, world(target), mut rng)
+        var step = H::Calls::draw_at(which, world<H>(target), mut rng)
         step.variant = which
 
+        let before = H::snapshot(target)
         let accepted = H::Calls::fire_at(which, target, cfg.gas, step)
         run.steps.push(step)
         run.executed = run.executed + 1
@@ -127,7 +150,10 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
             run.ok.set(which as usize, run.ok[which as usize] + 1)
         }
 
-        let broke = H::check(target)
+        var broke = H::check_step(target, before, step, accepted)
+        if broke == 0 {
+            broke = H::check(target)
+        }
         if broke != 0 {
             run.broken = broke
             run.at = i
@@ -144,14 +170,19 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
 pub fn replay<H: Harness>(_ steps: MemVec<Step>, _ gas: u256, _ salt: u256) -> u256
 uses (evm: mut Evm)
 {
-    require_funds(steps.len() as u256)
+    require_funds<H>(steps.len() as u256)
     let target = H::deploy(salt)
     let pre = H::check(target)
     if pre != 0 { return pre }
     var i: usize = 0
     while i < steps.len() {
         let step = steps[i]
-        let _ = H::Calls::fire_at(step.variant, target, gas, step)
+        let before = H::snapshot(target)
+        let accepted = H::Calls::fire_at(step.variant, target, gas, step)
+        let stepped = H::check_step(target, before, step, accepted)
+        if stepped != 0 {
+            return stepped
+        }
         let broke = H::check(target)
         if broke != 0 { return broke }
         i = i + 1
