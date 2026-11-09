@@ -1,0 +1,368 @@
+// THIRD-PARTY CODE, NOT OURS.
+//
+// Source:  "Complete ERC20" example (CoolCoin) from The Fe Guide,
+//          https://fe-lang.org/examples/erc20/ (guide for Fe 26.5), copied
+//          2026-11-09.
+// Author:  the Fe project (https://github.com/argotorg/fe).
+// License: the guide page shows no license notice of its own. The Fe project
+//          repository is Apache-2.0 (LICENSE-APACHE), which is also this
+//          repository's license. See SUBMISSION.md, "Third-party code".
+// Changes: none to the logic. Only this header was added, and `fe fmt` was run
+//          over the file (the CI format check covers every file): it re-wrapped
+//          lines and added trailing commas, nothing else.
+// Note:    the guide says "This example has not been audited."
+//
+// Fissure's harness and mutants are separate child modules of this one
+// (src/third_party/coolcoin/), so this file stays as published.
+
+// roles
+const MINTER: u256 = 1
+
+pub contract CoolCoin uses (ctx: mut Ctx, log: mut Log) {
+    // Storage fields. These act as effects within the contract.
+    mut store: TokenStore,
+    mut auth: AccessControl,
+
+    // Grant roles and mint the initial supply
+    init(initial_supply: u256, owner: Address)
+    uses (mut store, mut auth, mut ctx, mut log)
+    {
+        auth.grant(role: MINTER, to: owner)
+
+        if initial_supply > 0 {
+            store.mint(to: owner, amount: initial_supply)
+        }
+    }
+
+    recv Erc20 {
+        Transfer { to, amount } -> bool uses (ctx, mut store, mut log) {
+            store.transfer(from: ctx.caller(), to, amount)
+            true
+        }
+
+        Approve { spender, amount } -> bool uses (ctx, mut store, mut log) {
+            store.approve(owner: ctx.caller(), spender, amount)
+            true
+        }
+
+        TransferFrom { from, to, amount } -> bool
+        uses (ctx, mut store, mut log)
+        {
+            store.spend_allowance(owner: from, spender: ctx.caller(), amount)
+            store.transfer(from, to, amount)
+            true
+        }
+
+        BalanceOf { account } -> u256 uses store {
+            store.balances.get(key: account)
+        }
+
+        Allowance { owner, spender } -> u256 uses (store) {
+            store.allowances.get(key: (owner, spender))
+        }
+
+        TotalSupply {} -> u256 uses store {
+            store.total_supply
+        }
+
+        Name {} -> String<31> {
+            "CoolCoin"
+        }
+        Symbol {} -> String<8> {
+            "COOL"
+        }
+        Decimals {} -> u8 {
+            18
+        }
+    }
+
+    // Extended functionality (minting and burning)
+    recv Erc20Extended {
+        Mint { to, amount } -> bool uses (ctx, mut store, mut log, auth) {
+            auth.require(role: MINTER)
+            store.mint(to, amount)
+            true
+        }
+
+        // Burns tokens from caller's balance
+        Burn { amount } -> bool uses (ctx, mut store, mut log) {
+            store.burn(from: ctx.caller(), amount)
+            true
+        }
+
+        // Burns tokens from an account using allowance (requires allowance)
+        BurnFrom { from, amount } -> bool uses (ctx, mut store, mut log) {
+            store.spend_allowance(owner: from, spender: ctx.caller(), amount)
+            store.burn(from, amount)
+            true
+        }
+
+        IncreaseAllowance { spender, added_value } -> bool
+        uses (ctx, mut store, mut log)
+        {
+            let owner = ctx.caller()
+            let current = store.allowances.get(key: (owner, spender))
+            store.approve(owner, spender, amount: current + added_value)
+            true
+        }
+
+        DecreaseAllowance { spender, subtracted_value } -> bool
+        uses (ctx, mut store, mut log)
+        {
+            let owner = ctx.caller()
+            let current = store.allowances.get(key: (owner, spender))
+            assert!(
+                current >= subtracted_value,
+                "decreased allowance below zero",
+            )
+            store.approve(owner, spender, amount: current - subtracted_value)
+            true
+        }
+    }
+}
+
+struct TokenStore {
+    total_supply: u256,
+    balances: StorageMap<Address, u256>,
+    allowances: StorageMap<(Address, Address), u256>,
+}
+
+impl TokenStore {
+    fn transfer(mut self, from: Address, to: Address, amount: u256)
+    uses (log: mut Log)
+    {
+        assert!(from != Address::zero(), "transfer from zero address")
+        assert!(to != Address::zero(), "transfer to zero address")
+
+        let from_balance = self.balances.get(key: from)
+        assert!(from_balance >= amount, "transfer amount exceeds balance")
+
+        self.balances.set(key: from, value: from_balance - amount)
+        self.balances.set(key: to, value: self.balances.get(key: to) + amount)
+
+        log.emit(event: Transfer { from, to, value: amount })
+    }
+
+    fn mint(mut self, to: Address, amount: u256) uses (log: mut Log) {
+        assert!(to != Address::zero(), "mint to zero address")
+
+        self.total_supply += amount
+        self.balances.set(key: to, value: self.balances.get(key: to) + amount)
+
+        log.emit(
+            event: Transfer { from: Address::zero(), to, value: amount },
+        )
+    }
+
+    fn burn(mut self, from: Address, amount: u256) uses (log: mut Log) {
+        assert!(from != Address::zero(), "burn from zero address")
+
+        let from_balance = self.balances.get(key: from)
+        assert!(from_balance >= amount, "burn amount exceeds balance")
+
+        self.balances.set(key: from, value: from_balance - amount)
+        self.total_supply -= amount
+
+        log.emit(
+            event: Transfer { from, to: Address::zero(), value: amount },
+        )
+    }
+
+    fn approve(mut self, owner: Address, spender: Address, amount: u256)
+    uses (log: mut Log)
+    {
+        assert!(owner != Address::zero(), "approve from zero address")
+        assert!(spender != Address::zero(), "approve to zero address")
+
+        self.allowances.set(key: (owner, spender), value: amount)
+
+        log.emit(event: Approval { owner, spender, value: amount })
+    }
+
+    fn spend_allowance(mut self, owner: Address, spender: Address, amount: u256) {
+        let current = self.allowances.get(key: (owner, spender))
+        // This token decreases every allowance, including the largest value.
+        assert!(current >= amount, "insufficient allowance")
+        self.allowances.set(key: (owner, spender), value: current - amount)
+    }
+}
+
+pub struct AccessControl { roles: StorageMap<(u256, Address), bool> }
+
+impl AccessControl {
+    pub fn has_role(self, role: u256, account: Address) -> bool {
+        self.roles.get(key: (role, account))
+    }
+
+    pub fn require(self, role: u256) uses (ctx: Ctx) {
+        let caller = ctx.caller()
+        assert!(
+            self.has_role(role, account: caller),
+            "access denied: missing role",
+        )
+    }
+
+    pub fn grant(mut self, role: u256, to: Address) {
+        self.roles.set(key: (role, to), value: true)
+    }
+
+    pub fn revoke(mut self, role: u256, from: Address) {
+        self.roles.set(key: (role, from), value: false)
+    }
+}
+
+// ERC20 standard message types
+msg Erc20 {
+    #[selector = sol("name()")]
+    Name -> String<31>,
+
+    #[selector = sol("symbol()")]
+    Symbol -> String<8>,
+
+    #[selector = sol("decimals()")]
+    Decimals -> u8,
+
+    #[selector = sol("totalSupply()")]
+    TotalSupply -> u256,
+
+    #[selector = sol("balanceOf(address)")]
+    BalanceOf { account: Address } -> u256,
+
+    #[selector = sol("allowance(address,address)")]
+    Allowance { owner: Address, spender: Address } -> u256,
+
+    #[selector = sol("transfer(address,uint256)")]
+    Transfer { to: Address, amount: u256 } -> bool,
+
+    #[selector = sol("approve(address,uint256)")]
+    Approve { spender: Address, amount: u256 } -> bool,
+
+    #[selector = sol("transferFrom(address,address,uint256)")]
+    TransferFrom { from: Address, to: Address, amount: u256 } -> bool,
+}
+
+// Extended ERC20 message types (minting, burning, allowance helpers)
+msg Erc20Extended {
+    #[selector = sol("mint(address,uint256)")]
+    Mint { to: Address, amount: u256 } -> bool,
+
+    #[selector = sol("burn(uint256)")]
+    Burn { amount: u256 } -> bool,
+
+    #[selector = sol("burnFrom(address,uint256)")]
+    BurnFrom { from: Address, amount: u256 } -> bool,
+
+    #[selector = sol("increaseAllowance(address,uint256)")]
+    IncreaseAllowance { spender: Address, added_value: u256 } -> bool,
+
+    #[selector = sol("decreaseAllowance(address,uint256)")]
+    DecreaseAllowance { spender: Address, subtracted_value: u256 } -> bool,
+}
+
+// ERC20 events
+#[event]
+struct Transfer {
+    #[indexed]
+    from: Address,
+    #[indexed]
+    to: Address,
+    value: u256,
+}
+
+#[event]
+struct Approval {
+    #[indexed]
+    owner: Address,
+    #[indexed]
+    spender: Address,
+    value: u256,
+}
+
+#[test]
+fn transfer_preserves_supply_and_self_balance() uses (evm: mut Evm) {
+    let owner = evm.address()
+    let token = evm.create2<CoolCoin>(value: Wei::zero(), args: (1000, owner), salt: 0)
+    let ok: bool = evm
+        .call(
+            addr: token,
+            gas: 300000,
+            value: Wei::zero(),
+            message: Erc20::Transfer { to: owner, amount: 100 },
+        )
+    assert!(ok)
+    let balance: u256 = evm
+        .call(
+            addr: token,
+            gas: 100000,
+            value: Wei::zero(),
+            message: Erc20::BalanceOf { account: owner },
+        )
+    assert!(balance == 1000)
+    let recipient = Address::new(42)
+    let moved: bool = evm
+        .call(
+            addr: token,
+            gas: 300000,
+            value: Wei::zero(),
+            message: Erc20::Transfer { to: recipient, amount: 100 },
+        )
+    assert!(moved)
+    let received: u256 = evm
+        .call(
+            addr: token,
+            gas: 100000,
+            value: Wei::zero(),
+            message: Erc20::BalanceOf { account: recipient },
+        )
+    let supply: u256 = evm
+        .call(
+            addr: token,
+            gas: 100000,
+            value: Wei::zero(),
+            message: Erc20::TotalSupply {},
+        )
+    assert!(received == 100)
+    assert!(supply == 1000)
+}
+
+#[test]
+fn allowance_is_consumed() uses (evm: mut Evm) {
+    let owner = evm.address()
+    let token = evm.create2<CoolCoin>(value: Wei::zero(), args: (1000, owner), salt: 0)
+    let approved: bool = evm
+        .call(
+            addr: token,
+            gas: 300000,
+            value: Wei::zero(),
+            message: Erc20::Approve { spender: owner, amount: 100 },
+        )
+    assert!(approved)
+    let moved: bool = evm
+        .call(
+            addr: token,
+            gas: 300000,
+            value: Wei::zero(),
+            message: Erc20::TransferFrom { from: owner, to: Address::new(42), amount: 40 },
+        )
+    assert!(moved)
+    let allowance: u256 = evm
+        .call(
+            addr: token,
+            gas: 100000,
+            value: Wei::zero(),
+            message: Erc20::Allowance { owner, spender: owner },
+        )
+    assert!(allowance == 60)
+}
+
+#[test(should_revert)]
+fn rejects_transfer_above_balance() uses (evm: mut Evm) {
+    let token = evm.create2<CoolCoin>(value: Wei::zero(), args: (10, evm.address()), salt: 0)
+    let _: bool = evm
+        .call(
+            addr: token,
+            gas: 300000,
+            value: Wei::zero(),
+            message: Erc20::Transfer { to: Address::new(42), amount: 11 },
+        )
+}
