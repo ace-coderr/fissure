@@ -283,7 +283,8 @@ needed; the library has no dependencies.
   pass are out of reach. Several senders are possible with relay contracts
   (`Cast::deploy`, `hunt_cast`; at most 3 relays), but a relay is a contract, so
   a target that rejects contract callers cannot be tested that way, and a relayed
-  call costs about 1.65x the gas of a direct one (`docs/audit.md`, round 3). The demo
+  call costs about 1.63x the gas of a direct one (about 147.7k vs 90.7k per call on
+  the ERC-20, measured at `468389e`; `docs/mutation.md`, "Cost, measured"). The demo
   vault uses a zero lock period for this reason.
 - You list the messages yourself; `msg` blocks cannot be enumerated.
 - Shrinking is greedy: results are locally minimal, not proven globally minimal.

@@ -180,12 +180,18 @@ Still missed, unchanged: 3 (equivalent) and 4 (events are not observable).
 
 ### Cost, measured
 
-One run of 60 calls on the unmodified ERC-20, snapshots included:
+One run of 60 calls on the unmodified ERC-20, snapshots included (measured at `468389e`):
 
 | Mode | Gas per run | Gas per call |
 | --- | --- | --- |
-| single sender | 5.4 M | about 90 k |
-| test account + 2 relays | 8.9 M | about 149 k (1.65x) |
+| single sender | 5.4 M (5,440,765) | about 90.7 k |
+| test account + 2 relays | 8.9 M (8,860,377) | about 147.7 k (1.63x) |
+
+The first measurement of this table, taken at `5918bff` (step 8), was 5.4 M / about 90.3 k
+and 8.9 M / about 148.8 k, a ratio of 1.65x. Between the two, `src/relay.fe` changed (a
+bug fix that sends full calldata for messages of more than three words) and the
+held-out mutants were added; the single-sender path does not use the relay, yet it
+moved by about 0.5%, which I did not trace.
 
 A test has a fixed budget of 1 billion gas, memory included. The runner checks the
 remaining gas before every call and stops with `OutOfBudget` instead of dying.

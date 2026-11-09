@@ -216,9 +216,11 @@ mutants 2 and 9 with relays until harness-specific generators were written.
   with that call is not refunded. It is bounded by the per-call maximum value
   that the runner already requires the test account to hold.
 - **At most 3 relays**, so at most 4 senders.
-- **Gas and memory.** A relayed call goes through two contracts: measured about
-  1.65x the gas per call of a direct call on the ERC-20 (149k vs 90k, snapshots
-  included). Fe never frees memory and a test has a fixed gas budget of 1e9
+- **Gas and memory.** A relayed call goes through two contracts: about 1.63x the
+  gas per call of a direct call on the ERC-20 (about 147.7k vs 90.7k, snapshots
+  included; measured at `468389e`). When this round was written the same
+  measurement, at `5918bff`, read 149k vs 90k (1.65x); the small difference is
+  unexplained, see `docs/mutation.md`. Fe never frees memory and a test has a fixed gas budget of 1e9
   (memory included), so multi-sender hunts get fewer calls per test. `OutOfBudget` is raised
   before the budget is gone.
 - **Relays start empty**: no ether of their own and, for a token, no tokens;
