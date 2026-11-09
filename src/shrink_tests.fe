@@ -1,0 +1,252 @@
+use core::ptr::MemVec
+use ingot::gen::{Actor, Pay, Zero}
+use ingot::hunt::{emit_hunt, hunt}
+use ingot::menu::{Call0, Call1, Cons, Nil, Step}
+use ingot::runner::{Config, Harness, Run, fuzz, replay}
+use ingot::shrink::shrink
+use ingot::vault_ok::{VaultMsg, VaultOk}
+use std::evm::{Duration, ether}
+
+type Calls = Cons<Call0<VaultMsg::Deposit, Pay>, Cons<Call1<VaultMsg::Withdraw, Zero, Actor>, Nil>>
+
+fn deploy_vault(_ salt: u256) -> Address uses (evm: mut Evm) {
+    evm.create<VaultOk>(value: Wei::zero(), args: (Duration::zero(),))
+}
+
+/// Breaks once the account has deposited and then emptied its balance (the
+/// unlock time stays set): needs a deposit AND a withdrawal, so the minimal
+/// failing sequence is exactly two calls.
+struct PaidActor {}
+
+impl Harness for PaidActor {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        let owed: Wei = evm
+            .call(
+                addr: target,
+                gas: 100000,
+                value: Wei::zero(),
+                message: VaultMsg::BalanceOf { owner: evm.address() },
+            )
+        let unlock: Timestamp = evm
+            .call(
+                addr: target,
+                gas: 100000,
+                value: Wei::zero(),
+                message: VaultMsg::UnlockTime { owner: evm.address() },
+            )
+        if owed == Wei::zero() && unlock.as_seconds() != 0 {
+            return 1
+        }
+        0
+    }
+}
+
+/// A broken invariant that reads state outside the target: an actor's balance
+/// survives redeployment, so replays on a fresh target already "fail".
+struct Leaky {}
+
+impl Harness for Leaky {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        if evm.balance(Address::new(0x1001)) > Wei::zero() {
+            return 4
+        }
+        0
+    }
+}
+
+/// Breaks once the vault holds 3 ether or more: one big deposit is enough.
+struct BigVault {}
+
+impl Harness for BigVault {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        if evm.balance(target) >= ether(3) {
+            return 2
+        }
+        0
+    }
+}
+
+/// Never breaks.
+struct Fine {}
+
+impl Harness for Fine {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+}
+
+type WithdrawOnly = Cons<Call1<VaultMsg::Withdraw, Zero, Actor>, Nil>
+
+/// Every call reverts (nothing is ever deposited): a vacuous test.
+struct Starved {}
+
+impl Harness for Starved {
+    type Calls = WithdrawOnly
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        deploy_vault(salt)
+    }
+
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        0
+    }
+}
+
+fn cfg() -> Config {
+    Config { seed: 100, steps: 60, gas: 300000 }
+}
+
+fn same_steps(_ a: MemVec<Step>, _ b: MemVec<Step>) -> bool {
+    if a.len() != b.len() {
+        return false
+    }
+    var i: usize = 0
+    while i < a.len() {
+        let x = a[i]
+        let y = b[i]
+        if x.variant != y.variant
+            || x.value != y.value
+            || x.w0 != y.w0
+            || x.w1 != y.w1
+            || x.w2 != y.w2 {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn shrinks_to_the_two_call_minimum() uses (evm: mut Evm) {
+    let h = hunt<PaidActor>(cfg(), 30)
+    assert!(h.found)
+    assert!(h.shrunk.reproduced)
+    assert!(h.shrunk.steps.len() == 2)
+    assert!((h.shrunk.steps.len() as u256) <= h.original_len)
+    let first = h.shrunk.steps[0]
+    let second = h.shrunk.steps[1]
+    assert!(first.variant == 0 && first.value == 1)
+    assert!(second.variant == 1 && second.w0 == 0 && second.value == 0)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn shrunk_sequence_still_fails_on_replay() uses (evm: mut Evm) {
+    let h = hunt<PaidActor>(cfg(), 30)
+    assert!(h.found)
+    assert!(
+        replay<PaidActor>(h.shrunk.steps, 300000, 5_000_000) == h.shrunk.invariant,
+    )
+    // Dropping its last call must make it pass: the sequence is minimal.
+    var shorter = MemVec<Step>::new()
+    shorter.push(h.shrunk.steps[0])
+    assert!(replay<PaidActor>(shorter, 300000, 5_000_001) == 0)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn threshold_failure_shrinks_to_one_call() uses (evm: mut Evm) {
+    let h = hunt<BigVault>(cfg(), 40)
+    assert!(h.found)
+    assert!(h.shrunk.steps.len() == 1)
+    let only = h.shrunk.steps[0]
+    assert!(only.variant == 0)
+    assert!(only.value >= 3_000_000_000_000_000_000)
+    assert!(replay<BigVault>(h.shrunk.steps, 300000, 5_000_002) == 2)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn the_printed_seed_reproduces_the_failure() uses (evm: mut Evm) {
+    let h = hunt<PaidActor>(cfg(), 30)
+    assert!(h.found)
+    let again = fuzz<PaidActor>(Config { seed: h.seed, steps: 60, gas: 300000 }, 9)
+    assert!(again.broken == h.shrunk.invariant)
+    assert!(again.steps.len() as u256 == h.original_len)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn shrinking_is_deterministic() uses (evm: mut Evm) {
+    let a = hunt<PaidActor>(cfg(), 30)
+    let b = hunt<PaidActor>(cfg(), 30)
+    assert!(a.seed == b.seed)
+    assert!(a.original_len == b.original_len)
+    assert!(same_steps(a.shrunk.steps, b.shrunk.steps))
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn a_correct_target_is_not_found() uses (evm: mut Evm) {
+    let h = hunt<Fine>(cfg(), 10)
+    assert!(!h.found)
+    assert!(h.accepted > 0)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn a_starved_target_accepts_nothing() uses (evm: mut Evm) {
+    let h = hunt<Starved>(cfg(), 5)
+    assert!(!h.found)
+    assert!(h.accepted == 0)
+}
+
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn check_refuses_a_vacuous_pass() uses (evm: mut Evm) {
+    let _ = ingot::hunt::check<Starved>(cfg(), 5)
+}
+
+#[test(should_revert, balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn check_reverts_with_the_failure() uses (evm: mut Evm) {
+    let _ = ingot::hunt::check<PaidActor>(cfg(), 30)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn a_failure_that_does_not_replay_is_not_shrunk() uses (evm: mut Evm) {
+    // Claim an invariant broke in a run where it did not.
+    let clean = fuzz<Fine>(Config { seed: 3, steps: 20, gas: 300000 }, 0)
+    let fake = Run {
+        broken: 9,
+        at: 19,
+        executed: clean.executed,
+        accepted: clean.accepted,
+        calls: clean.calls,
+        ok: clean.ok,
+        steps: clean.steps,
+    }
+    let out = shrink<Fine>(fake, 300000)
+    assert!(!out.reproduced)
+    assert!(out.steps.len() == 20)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn a_report_is_emitted_for_a_found_failure() uses (evm: mut Evm) {
+    let h = hunt<PaidActor>(cfg(), 30)
+    emit_hunt(h)
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn an_invariant_leaking_outside_state_is_not_misreported() uses (evm: mut Evm) {
+    let h = hunt<Leaky>(cfg(), 30)
+    assert!(h.found)
+    assert!(!h.shrunk.reproduced)
+    assert!(h.shrunk.steps.len() as u256 == h.original_len)
+}

@@ -1,0 +1,169 @@
+//! Shrinking: reduce a failing call sequence to a small one that still breaks
+//! the same invariant.
+//!
+//! Three passes, repeated until nothing changes: cut everything after the
+//! failing call; drop chunks of calls (halving the chunk size); simplify the
+//! value and argument words of what is left (toward 0, then by halving). Every
+//! candidate is replayed on a freshly deployed target, and is kept only if the
+//! same invariant still breaks, so the result always fails.
+
+use core::ptr::MemVec
+use ingot::menu::Step
+use ingot::runner::{Harness, Run, replay}
+
+/// Replays use salts from here up, clear of the salts used by fuzz runs.
+const SHRINK_SALT_BASE: u256 = 1_000_000
+
+/// Upper bound on replays per shrink, so shrinking always terminates quickly.
+pub const MAX_ATTEMPTS: u256 = 4000
+
+pub struct Shrunk {
+    /// The minimal sequence found. Fails with `invariant` when replayed.
+    pub steps: MemVec<Step>,
+    pub invariant: u256,
+    /// False if the original sequence did not fail again on replay, or if the
+    /// invariant already fails on a fresh target with no calls (it depends on
+    /// state outside the target). The sequence is then returned unchanged and
+    /// never claimed as minimal.
+    pub reproduced: bool,
+    /// Replays spent.
+    pub attempts: u256,
+}
+
+fn field(_ s: Step, _ k: u256) -> u256 {
+    if k == 0 { return s.value }
+    if k == 1 { return s.w0 }
+    if k == 2 { return s.w1 }
+    s.w2
+}
+
+fn with_field(_ s: Step, _ k: u256, _ v: u256) -> Step {
+    var t = s
+    if k == 0 {
+        t.value = v
+    } else if k == 1 {
+        t.w0 = v
+    } else if k == 2 { t.w1 = v } else { t.w2 = v }
+    t
+}
+
+fn without(_ steps: MemVec<Step>, _ start: usize, _ count: usize) -> MemVec<Step> {
+    var out = MemVec<Step>::new()
+    var i: usize = 0
+    while i < steps.len() {
+        if i < start || i >= start + count {
+            out.push(steps[i])
+        }
+        i = i + 1
+    }
+    out
+}
+
+fn prefix(_ steps: MemVec<Step>, _ n: usize) -> MemVec<Step> {
+    var out = MemVec<Step>::new()
+    var i: usize = 0
+    while i < n && i < steps.len() {
+        out.push(steps[i])
+        i = i + 1
+    }
+    out
+}
+
+fn copy_of(_ steps: MemVec<Step>) -> MemVec<Step> {
+    prefix(steps, steps.len())
+}
+
+/// Replays `candidate`; true if it still breaks `invariant`. Spends one attempt.
+fn still_fails<H: Harness>(
+    _ candidate: MemVec<Step>,
+    _ invariant: u256,
+    _ gas: u256,
+    _ attempts: mut u256,
+) -> bool
+uses (evm: mut Evm)
+{
+    let salt = SHRINK_SALT_BASE + attempts
+    attempts = attempts + 1
+    replay<H>(candidate, gas, salt) == invariant
+}
+
+pub fn shrink<H: Harness>(_ run: Run, _ gas: u256) -> Shrunk uses (evm: mut Evm) {
+    var attempts: u256 = 0
+    var steps = prefix(run.steps, run.at as usize + 1)
+    if run.broken == 0 {
+        return Shrunk { steps: copy_of(run.steps), invariant: 0, reproduced: false, attempts: 0 }
+    }
+    let inv = run.broken
+
+    if !still_fails<H>(steps, inv, gas, mut attempts) {
+        return Shrunk { steps: copy_of(run.steps), invariant: inv, reproduced: false, attempts }
+    }
+
+    // An invariant that already fails on a fresh target with no calls reads
+    // state outside the target (an actor's balance, say), which earlier replays
+    // have changed. Shrinking would "succeed" with zero calls, which is wrong.
+    let none = MemVec<Step>::new()
+    if still_fails<H>(none, inv, gas, mut attempts) {
+        return Shrunk { steps: copy_of(run.steps), invariant: inv, reproduced: false, attempts }
+    }
+
+    var changed = true
+    var rounds: u256 = 0
+    while changed && rounds < 8 && attempts < MAX_ATTEMPTS {
+        changed = false
+        rounds = rounds + 1
+
+        // Pass 1: drop chunks of calls, big chunks first.
+        var chunk = steps.len() / 2
+        if chunk == 0 { chunk = 1 }
+        while chunk > 0 && attempts < MAX_ATTEMPTS {
+            var start: usize = 0
+            while start < steps.len() && attempts < MAX_ATTEMPTS {
+                let cand = without(steps, start, chunk)
+                if still_fails<H>(cand, inv, gas, mut attempts) {
+                    steps = cand
+                    changed = true
+                } else {
+                    start = start + chunk
+                }
+            }
+            chunk = chunk / 2
+        }
+
+        // Pass 2: simplify each word of each call.
+        var i: usize = 0
+        while i < steps.len() && attempts < MAX_ATTEMPTS {
+            var k: u256 = 0
+            while k < 4 {
+                var tries: u256 = 0
+                var progress = true
+                while progress && tries < 12 && attempts < MAX_ATTEMPTS {
+                    progress = false
+                    tries = tries + 1
+                    let cur = field(steps[i], k)
+                    if cur != 0 {
+                        // Candidates, simplest first: 0, 1, half.
+                        var c: u256 = 0
+                        while c < 3 && !progress {
+                            var v: u256 = 0
+                            if c == 1 { v = 1 } else if c == 2 { v = cur / 2 }
+                            if v < cur {
+                                var cand = copy_of(steps)
+                                cand.set(i, with_field(steps[i], k, v))
+                                if still_fails<H>(cand, inv, gas, mut attempts) {
+                                    steps = cand
+                                    progress = true
+                                    changed = true
+                                }
+                            }
+                            c = c + 1
+                        }
+                    }
+                }
+                k = k + 1
+            }
+            i = i + 1
+        }
+    }
+    Shrunk { steps, invariant: inv, reproduced: true, attempts }
+}

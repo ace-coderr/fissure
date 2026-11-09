@@ -29,7 +29,7 @@ fn vault_invariants(_ target: Address) -> u256 uses (evm: mut Evm) {
 }
 
 fn deploy_vault(_ salt: u256) -> Address uses (evm: mut Evm) {
-    evm.create2<VaultOk>(value: Wei::zero(), args: (Duration::zero(),), salt: salt)
+    evm.create<VaultOk>(value: Wei::zero(), args: (Duration::zero(),))
 }
 
 // Baseline: every argument is a small integer.

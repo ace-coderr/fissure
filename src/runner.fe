@@ -121,6 +121,26 @@ pub fn fuzz<H: Harness>(_ cfg: Config, _ salt: u256) -> Run uses (evm: mut Evm) 
     run
 }
 
+/// Replay concrete `steps` on a fresh target (deployed with `salt`) and return
+/// the id of the invariant that broke, or 0 if none did. This is what makes a
+/// printed sequence reproducible without the seed.
+pub fn replay<H: Harness>(_ steps: MemVec<Step>, _ gas: u256, _ salt: u256) -> u256
+uses (evm: mut Evm)
+{
+    let target = H::deploy(salt)
+    let pre = H::check(target)
+    if pre != 0 { return pre }
+    var i: usize = 0
+    while i < steps.len() {
+        let step = steps[i]
+        let _ = H::Calls::fire_at(step.variant, target, gas, step)
+        let broke = H::check(target)
+        if broke != 0 { return broke }
+        i = i + 1
+    }
+    0
+}
+
 /// `fuzz`, then revert with `InvariantBroken` if an invariant broke. Use this
 /// as the body of a test: a clean run returns normally.
 pub fn assert_holds<H: Harness>(_ cfg: Config) uses (evm: mut Evm) {

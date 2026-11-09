@@ -1,0 +1,155 @@
+//! Search and report: run many seeds, shrink the first failure, and say exactly
+//! how to reproduce it.
+
+use core::ptr::MemVec
+use ingot::menu::Step
+use ingot::prng::Prng
+use ingot::runner::{Config, Harness, fuzz}
+use ingot::shrink::{Shrunk, shrink}
+use std::abi::dyn_array::DynArray
+use std::evm::effects::revert_error
+
+pub struct Hunt {
+    pub found: bool,
+    /// The seed of the failing run. `Config { seed, .. }` reproduces it.
+    pub seed: u256,
+    /// Length of the failing sequence before shrinking.
+    pub original_len: u256,
+    pub shrunk: Shrunk,
+    /// Runs performed.
+    pub runs: u256,
+    /// Calls the callee accepted, over all runs. Zero means the test proved
+    /// nothing, and `check` refuses to call that a pass.
+    pub accepted: u256,
+    /// Calls made, over all runs.
+    pub executed: u256,
+}
+
+/// Emitted by `emit_hunt`; readable with `fe test --show-logs` in a test that
+/// passes (logs are not shown for failed tests).
+#[event]
+pub struct Found {
+    pub seed: u256,
+    pub invariant: u256,
+    pub original_len: u256,
+    pub shrunk_len: u256,
+    pub attempts: u256,
+}
+
+/// One call of the shrunk sequence.
+#[event]
+pub struct ShrunkStep {
+    pub index: u256,
+    pub variant: u256,
+    pub value: u256,
+    pub w0: u256,
+    pub w1: u256,
+    pub w2: u256,
+}
+
+/// Revert data of a failed `check`. `steps` is the shrunk sequence, five words
+/// per call: variant, value, w0, w1, w2.
+#[error]
+pub struct Failure {
+    pub seed: u256,
+    pub invariant: u256,
+    pub original_len: u256,
+    pub steps: DynArray<u256>,
+}
+
+/// Every run was rejected by the callee, so no invariant was ever exercised.
+#[error]
+pub struct Vacuous { pub executed: u256 }
+
+/// Run up to `runs` fuzz runs, with seeds derived from `cfg.seed`. The first
+/// run that breaks an invariant is shrunk.
+pub fn hunt<H: Harness>(_ cfg: Config, _ runs: u256) -> Hunt uses (evm: mut Evm) {
+    var accepted: u256 = 0
+    var executed: u256 = 0
+    var r: u256 = 0
+    while r < runs {
+        let seed = Prng::derive(cfg.seed, r)
+        let run = fuzz<H>(Config { seed, steps: cfg.steps, gas: cfg.gas }, r)
+        accepted = accepted + run.accepted
+        executed = executed + run.executed
+        if run.broken != 0 {
+            let original_len = run.steps.len() as u256
+            let shrunk = shrink<H>(run, cfg.gas)
+            return Hunt { found: true, seed, original_len, shrunk, runs: r + 1, accepted, executed }
+        }
+        r = r + 1
+    }
+    Hunt {
+        found: false,
+        seed: cfg.seed,
+        original_len: 0,
+        shrunk: Shrunk { steps: MemVec<Step>::new(), invariant: 0, reproduced: true, attempts: 0 },
+        runs,
+        accepted,
+        executed,
+    }
+}
+
+pub fn emit_hunt(_ h: Hunt) uses (evm: mut Evm) {
+    if !h.found { return }
+    evm.emit(
+        Found {
+            seed: h.seed,
+            invariant: h.shrunk.invariant,
+            original_len: h.original_len,
+            shrunk_len: h.shrunk.steps.len() as u256,
+            attempts: h.shrunk.attempts,
+        },
+    )
+    var i: usize = 0
+    while i < h.shrunk.steps.len() {
+        let s = h.shrunk.steps[i]
+        evm.emit(
+            ShrunkStep {
+                index: i as u256,
+                variant: s.variant,
+                value: s.value,
+                w0: s.w0,
+                w1: s.w1,
+                w2: s.w2,
+            },
+        )
+        i = i + 1
+    }
+}
+
+fn flatten(_ steps: MemVec<Step>) -> DynArray<u256> {
+    var words = MemVec<u256>::new()
+    var i: usize = 0
+    while i < steps.len() {
+        let s = steps[i]
+        words.push(s.variant)
+        words.push(s.value)
+        words.push(s.w0)
+        words.push(s.w1)
+        words.push(s.w2)
+        i = i + 1
+    }
+    DynArray<u256>::from_slice(words.as_slice())
+}
+
+/// The test body: hunt, and on a failure revert with `Failure` (seed, invariant,
+/// shrunk sequence). Reverts with `Vacuous` if nothing was ever accepted.
+/// Returns the number of accepted calls on success.
+pub fn check<H: Harness>(_ cfg: Config, _ runs: u256) -> u256 uses (evm: mut Evm) {
+    let h = hunt<H>(cfg, runs)
+    if h.found {
+        revert_error(
+            Failure {
+                seed: h.seed,
+                invariant: h.shrunk.invariant,
+                original_len: h.original_len,
+                steps: flatten(h.shrunk.steps),
+            },
+        )
+    }
+    if h.accepted == 0 {
+        revert_error(Vacuous { executed: h.executed })
+    }
+    h.accepted
+}

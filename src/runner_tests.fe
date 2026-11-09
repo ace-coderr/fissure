@@ -7,7 +7,7 @@ use std::evm::Duration
 type Calls = Cons<Call0<VaultMsg::Deposit, Pay>, Cons<Call1<VaultMsg::Withdraw, Zero, Actor>, Nil>>
 
 fn deploy_vault(_ salt: u256) -> Address uses (evm: mut Evm) {
-    evm.create2<VaultOk>(value: Wei::zero(), args: (Duration::zero(),), salt: salt)
+    evm.create<VaultOk>(value: Wei::zero(), args: (Duration::zero(),))
 }
 
 /// Holds forever: nothing is ever wrong.
