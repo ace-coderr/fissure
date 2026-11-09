@@ -189,3 +189,22 @@ One run of 60 calls on the unmodified ERC-20, snapshots included:
 
 A test has a fixed budget of 1 billion gas, memory included. The runner checks the
 remaining gas before every call and stops with `OutOfBudget` instead of dying.
+
+## Step 9: held-out evidence
+
+### 9a. Freeze
+
+Everything that produces or judges calls is frozen at commit
+`1af440e4366f83b4fb60bf07d0eb7ee5cd7d0bc8`, before any new mutant was written:
+
+| File | git blob (first 12) |
+| --- | --- |
+| `src/gen.fe` (generators) | `501b5a5164f8` |
+| `src/menu.fe` | `35d2aceb276f` |
+| `src/runner.fe` | `841359c4cfdc` |
+| `src/shrink.fe` | `8bc18d86f020` |
+| `src/third_party/coolcoin/harness.fe` (single-sender harness, generic generators) | `e7aaf196fdf5` |
+| `src/third_party/coolcoin/harness_multi.fe` (multi-sender harness, tuned generators `Party` / `Tok`) | `96049865a197` |
+
+Check with `git hash-object <file>` at any later commit. If a later commit changes
+one of these files, this table says so below.
