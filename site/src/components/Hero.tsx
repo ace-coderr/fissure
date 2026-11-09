@@ -10,7 +10,9 @@ import { useReducedMotion } from "../lib/motion";
 import { Crack, CRACK_LEFT, CRACK_RIGHT } from "./primitives";
 
 const FINAL = "FISSURE";
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@";
+// Glyphs that fit a headline cell (no W, M or symbols that overflow); the narrow I gets narrow glyphs.
+const ALPHABET = "ABCDEFGHJKLNPQRSTUVXYZ2345679";
+const NARROW = "I1!|:;";
 const FRAME_MS = 55;
 const LOCK_AT = FINAL.split("").map((_, i) => 560 + i * 150); // when each letter locks
 const ALL_LOCKED = LOCK_AT[LOCK_AT.length - 1] + 120;
@@ -19,7 +21,11 @@ const CRACK_MS = 760;
 type Phase = "scramble" | "crack" | "split";
 
 function frame(prng: FissurePrng, elapsed: number): string[] {
-  return FINAL.split("").map((c, i) => (elapsed >= LOCK_AT[i] ? c : ALPHABET[prng.below(ALPHABET.length)]));
+  return FINAL.split("").map((c, i) => {
+    if (elapsed >= LOCK_AT[i]) return c;
+    const set = c === "I" ? NARROW : ALPHABET;
+    return set[prng.below(set.length)];
+  });
 }
 
 function Line({ letters, hidden }: { letters: string[]; hidden?: boolean }) {

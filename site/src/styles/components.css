@@ -201,7 +201,9 @@
 .hero-cell {
   position: relative;
   display: inline-block;
-  padding-bottom: 0.04em;
+  overflow: hidden; /* a scrambled glyph never spills into its neighbour */
+  padding: 0 0.07em 0.04em;
+  margin-inline: -0.07em;
 }
 .hero-ghost {
   visibility: hidden;
