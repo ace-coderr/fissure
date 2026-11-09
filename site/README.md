@@ -33,3 +33,5 @@ numbers, the Fe version, the capture date and its sources.
 
 Fonts (Archivo, JetBrains Mono; SIL OFL 1.1) are bundled from the `@fontsource`
 packages and served from the site itself.
+
+Deployed on Netlify (site `fissure-fe`), automatically on every push to `main`: base directory `site`, build `npm run build`, publish `dist`.
