@@ -54,9 +54,17 @@ starter's logic) and `src/vault_bug.fe` (the same plus one seeded bug).
 
 ### Third-party code
 
-None copied. Algorithms implemented from their public descriptions: SplitMix
-mixing constants in `src/prng.fe`, Keccak-256 in `scripts/fissure-report.mjs`.
-The Fe standard library is used as a dependency, as any Fe project does.
+- **CoolCoin ERC-20** (`src/third_party/coolcoin.fe`): the "Complete ERC20"
+  example from The Fe Guide, https://fe-lang.org/examples/erc20/ (Fe project,
+  https://github.com/argotorg/fe), copied 2026-11-09. **Not our work.** The page
+  carries no license notice of its own; the Fe project repository is Apache-2.0,
+  which is also this repository's license. The logic is unchanged (`fe fmt`
+  re-wrapped lines and added trailing commas; a header comment was added). It is
+  the target Fissure is run against; the harness and the mutants live in child
+  modules and are ours (the mutants are marked as derivatives).
+- Algorithms implemented from their public descriptions: SplitMix mixing
+  constants in `src/prng.fe`, Keccak-256 in `scripts/fissure-report.mjs`.
+- The Fe standard library is used as a dependency, as any Fe project does.
 
 ### AI assistance
 
