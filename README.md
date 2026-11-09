@@ -1,0 +1,240 @@
+# Fissure
+
+**Pitch:** Fissure is a stateful invariant-testing toolkit written in Fe: it turns a contract's `msg` types into random call sequences inside `fe test`, checks your invariants after every call, and shrinks any failure to a minimal sequence you can replay.
+
+## The problem
+
+Unit tests check the paths their author thought of. Contract bugs usually live in
+the paths nobody thought of: a particular amount, a particular order of calls, an
+edge value like exactly 1 wei. Stateful invariant testing (random call sequences
+plus properties that must always hold) finds those, but it normally means
+leaving the language: a separate tool, a separate test language, separate
+configuration. Fe has no such tool yet.
+
+## Approach
+
+Fissure runs inside `fe test`, in Fe, with no external tooling.
+
+1. You list the contract's messages once, as a type, and name a generator for
+   the value and for each argument.
+2. Fissure deploys a fresh contract, makes N random calls from a seed, and calls
+   your `check` function after every call. `check` is a plain Fe function that
+   returns 0 if every invariant holds, or the id of the one that broke.
+3. On a failure it replays candidates on freshly deployed contracts to shrink the
+   sequence: it drops calls, then simplifies values and arguments, and keeps a
+   candidate only if the same invariant still breaks.
+4. It reports the seed, the shrunk calls and the broken invariant.
+
+Built during the contest: everything under `src/` except the vault's original
+logic, plus `scripts/` and `docs/` (see Declaration).
+
+## Fe highlight
+
+**A `msg` variant is a type, so a random call can be built generically, with no
+reflection and no per-message code.**
+
+In Fe every `msg` variant is its own struct implementing
+`core::message::MsgVariant<Sol>` (selector as an associated const) plus
+`AbiSize` (static argument size). A function generic over `M: MsgVariant<Sol>`
+can therefore build `selector ++ argument words` for any message:
+
+```fe
+impl<M, V, A0, A1, A2> Entry for Call<M, V, A0, A1, A2>
+where M: MsgVariant<Sol>, V: Generator, A0: Generator, A1: Generator, A2: Generator
+{
+    fn fire(_ target: Address, _ gas: u256, _ step: Step) -> bool uses (evm: mut Evm) {
+        let size = <M as AbiSize>::HEAD_SIZE as usize
+        var buf = MemBuffer::alloc(36 + size)
+        let sel = <M as MsgVariant<Sol>>::SELECTOR
+        buf.write_word(offset: 0, value: (sel as u256) << 224)
+        if size >= 32 { buf.write_word(offset: 4, value: step.w0) }
+        // ...
+        buf.truncate(4 + size)
+        evm.try_call_raw(addr: target, gas: gas, value: wei(step.value), args: buf.span()).success()
+    }
+}
+```
+
+A `msg` block cannot be enumerated, so the menu is a type-level list that the
+compiler recurses over (`Cons<H, T>` / `Nil`, with `const LEN = 1 + T::LEN`).
+The callee's own decoder accepts or rejects the words, and `try_call_raw`
+returns the outcome instead of bubbling a revert, so a bad call is data, not a
+crashed test. `docs/spike.md` records how this was found and what else was tried.
+
+## Technical quality
+
+- **Deterministic.** All randomness comes from a seeded PRNG written in Fe
+  (`src/prng.fe`). The same seed gives the same calls: identical across repeated
+  runs, optimisation levels `-O 0`/default/`-O 2`, and between a local run and CI.
+- **Explicit effects.** Anything touching the chain declares
+  `uses (evm: mut Evm)`; randomness is a value threaded by `mut`, never ambient.
+- **Generic with bounds.** `Generator`, `Entry`, `Menu` and `Harness` are traits;
+  the runner is `fuzz<H: Harness>(...)`.
+- **Shrunk results are verified.** Every kept candidate, and the final result, is
+  replayed on a fresh deployment and must still break the same invariant.
+- **Guards against false confidence.** `check` refuses to pass if no call was
+  accepted (`Vacuous`), if a menu entry was never accepted (`Unreached`), if the
+  menu is empty (`EmptyMenu`), or if the sender cannot afford the run
+  (`Underfunded`).
+- **Audited.** `docs/audit.md` lists what was tried to break it, one real bug
+  found and fixed (seeds that did not reproduce), and what remains unfixed.
+- **51 Fe tests**, `fe fmt --check` clean, CI green.
+
+## Originality
+
+Invariant testing and shrinking are established ideas (Echidna, Foundry's
+invariant tests, property-based testing generally); Fissure does not claim them.
+What is new here is doing it natively in Fe and inside `fe test`: calls derived
+from Fe's `msg` types through `MsgVariant`, a deterministic PRNG and generators
+written in Fe, and shrinking on plain-data steps. Names and API are our own; no
+other tool's code or API was copied.
+
+## Usefulness
+
+Anyone writing a Fe contract can add stateful testing next to their unit tests:
+write the harness (deploy, menu, `check`), run `fe test`. The included demo shows
+the shape of bug it targets: a vault that is correct on every path except a
+1-wei deposit made while the account already has a balance. Fissure finds it
+and reduces the failing run to the two calls that matter. A measured example of
+why typed generators matter: on the correct vault, plain small-integer arguments
+revert 67.2% of calls; typed generators revert 13.0%, and the rest are the
+contract's own guards (`docs/revert-rate.md`).
+
+## Documentation and demo
+
+One command, no deployment:
+
+```sh
+npm run demo
+```
+
+```
+demo_vault_bug_is_found_and_shrunk: FISSURE FOUND A FAILURE
+  seed 63943086030706054941702419180308291968568539214185280263325138216467852686274   broken invariant #1
+  4 calls shrunk to 2 in 19 replays
+    1. deposit()  value=1 wei   words=[0, 0, 0]
+    2. deposit()  value=1 wei   words=[0, 0, 0]
+```
+
+Also in `docs/`: [demo.md](docs/demo.md), [spike.md](docs/spike.md) (the design
+question and the answer), [revert-rate.md](docs/revert-rate.md),
+[audit.md](docs/audit.md), [compiler-notes.md](docs/compiler-notes.md).
+
+### Using it
+
+```fe
+use ingot::gen::{Actor, Pay, Zero}
+use ingot::hunt::check
+use ingot::menu::{Call0, Call1, Cons, Nil}
+use ingot::runner::{Config, Harness}
+
+type Calls = Cons<
+    Call0<VaultMsg::Deposit, Pay>,                 // payable, no arguments
+    Cons<Call1<VaultMsg::Withdraw, Zero, Actor>, Nil>, // one address argument
+>
+
+struct MyVault {}
+
+impl Harness for MyVault {
+    type Calls = Calls
+
+    fn deploy(_ salt: u256) -> Address uses (evm: mut Evm) {
+        evm.create<MyContract>(value: Wei::zero(), args: (Duration::zero(),))
+    }
+
+    // 0 = all invariants hold; otherwise the id of the one that broke.
+    fn check(_ target: Address) -> u256 uses (evm: mut Evm) {
+        // `owed` is your own helper, e.g. a view call to the contract.
+        if evm.balance(target) != owed(target) { return 1 }
+        0
+    }
+}
+
+#[test(balance = 1_000_000_000_000_000_000_000_000_000_000)]
+fn vault_keeps_its_promise() uses (evm: mut Evm) {
+    let _ = check<MyVault>(Config { seed: 1, steps: 80, gas: 300000 }, 50)
+}
+```
+
+A failing `check` reverts with `Failure` (seed, invariant, shrunk calls); decode
+it with `fe test --show-logs | node scripts/fissure-report.mjs`. Rules for a
+harness: give the test a large `balance` (Fissure checks); read only the
+target's own state in `check`; prefer `evm.create` over `create2` (a repeated
+salt collides). Generators: `Zero`, `SmallWord`, `Flag`, `Actor`,
+`UpTo<MAX>`, `Amount` (aims at the target's current balance: 0, 1, balance,
+balance +/- 1, max) and `Pay` (value to attach).
+
+## Architecture
+
+| File | Role |
+| --- | --- |
+| `src/prng.fe` | `Draw` trait and `Prng`: seeded, deterministic, `below`/`between` total |
+| `src/gen.fe` | `Generator` trait and the generators; `Env` is what a generator may see |
+| `src/menu.fe` | `Step` (one call as plain data), `Call<..>` entries, the `Cons`/`Nil` menu |
+| `src/runner.fe` | `Harness` trait, `fuzz` (random run), `replay` (concrete steps), guards |
+| `src/shrink.fe` | the shrinker: cut after failure, drop chunks, simplify words |
+| `src/hunt.fe` | many seeds, shrink the first failure, events and `Failure` error, `check` |
+| `src/vault_ok.fe`, `src/vault_bug.fe` | the demo contracts |
+| `src/*_tests.fe` | unit tests, demo tests, audit regressions |
+| `scripts/fissure-report.mjs` | Node: decodes events and errors from `fe test` output (docs tooling only) |
+
+## Build and test
+
+```sh
+fe --version   # fe 26.5.0 (3dab95f)
+fe fmt --check
+fe test
+fe build
+npm run demo   # needs Node 18+ as well
+```
+
+Exact Fe version: **26.5.0** (`3dab95f`), pinned in `.github/workflows/ci.yml`.
+Install: `curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.5.0`.
+There is no Windows build of Fe 26.5.0; development was on Windows through WSL
+(Ubuntu), CI runs on `ubuntu-latest`. Only Fe and (for the demo script) Node are
+needed; the library has no dependencies.
+
+## Limitations
+
+- Static argument types only; at most three generated argument words per call.
+  Dynamic types (`bytes`, `string`, arrays) get only a zero head word, so they
+  are not generated meaningfully (not yet tried on a contract that takes one).
+- One sender at a fixed timestamp: `fe test` has no caller or time cheat codes,
+  so bugs that need time to pass or several actors are out of reach. The demo
+  vault uses a zero lock period for this reason.
+- You list the messages yourself; `msg` blocks cannot be enumerated.
+- Shrinking is greedy: results are locally minimal, not proven globally minimal.
+- Invariants must depend only on the target contract's state; Fissure detects
+  the common leak (an invariant failing on a fresh target) but cannot detect all.
+- `fe test` shows logs only for passing tests, so a failing test carries its
+  report in revert data (hex), decoded by the Node script; there it labels calls
+  by menu index, not function name.
+- The PRNG is chosen for determinism, not tested for statistical quality.
+- Only the default EVM test backend is supported (native tests cannot use
+  balances or logs).
+- Tested on the two demo vaults and unit tests; not yet on a large real-world
+  contract. The audit was done by the author with AI assistance and has had no
+  independent review.
+
+## Declaration
+
+- **Pre-existing work:** the Fe Builders Challenge starter
+  ([builders-challenge-starter](https://github.com/fe-lang/builders-challenge-starter),
+  upstream commit `f9d9aa9`), imported unchanged as commit `0b15af8`
+  ("starter baseline"), with only the ingot renamed to `fissure` and LF line
+  endings enforced. It contains the time-locked vault, its three tests, the CI
+  workflow, the license and the submission template. Everything else was written
+  during the contest.
+- **Third-party code:** none copied. `vault_ok.fe` adapts the starter vault and
+  `vault_bug.fe` adapts that. The PRNG uses the published SplitMix mixing
+  constants; the Keccak-256 in the Node script is our implementation of the
+  public algorithm.
+- **AI assistance:** see [SUBMISSION.md](SUBMISSION.md).
+
+## Team
+
+Built by [ace-coderr](https://github.com/ace-coderr).
+
+## License
+
+Apache-2.0 (see `LICENSE`).

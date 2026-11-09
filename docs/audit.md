@@ -70,8 +70,9 @@ fail, the original sequence is returned with `reproduced = false`.
   proven-uniform output. `below(n)` uses plain modulo: for `n` up to 2^64 the
   bias is below 2^-190, but for `n` near 2^255 it is large. Generators only use
   small `n`.
-- **Static arguments only.** Dynamic types (`bytes`, `string`, arrays) get a
-  zero head word, so the callee rejects the call. At most three argument words
+- **Static arguments only.** Dynamic types (`bytes`, `string`, arrays) get only a
+  zero head word and are not generated meaningfully (untested against a contract
+  that takes one). At most three argument words
   are generated; further static words are zero.
 - **One sender, one block.** `fe test` offers no way to change the caller or
   advance time, so Fissure fuzzes a single account at a fixed timestamp.
