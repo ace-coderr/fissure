@@ -1,0 +1,52 @@
+{
+  "provenance": {
+    "codeCommit": "c5a7650c21173a50014746a8360e878ed80cf1f9",
+    "capturedAtCommit": "75fd23e447da9d6e608a3df75f5901f77c603310",
+    "fe": "fe 26.5.0 (3dab95f)",
+    "captured": "2026-11-09",
+    "sources": [
+      "tests.txt",
+      "demo.decoded.txt",
+      "mutants.decoded.txt",
+      "docs/revert-rate.md"
+    ]
+  },
+  "tests": 114,
+  "demo": {
+    "originalLen": 4,
+    "shrunkLen": 2,
+    "replays": 19
+  },
+  "mutants": {
+    "total": 17,
+    "step7": {
+      "single": {
+        "caught": 7,
+        "total": 11
+      },
+      "relays": {
+        "caught": 9,
+        "total": 11
+      }
+    },
+    "heldOut": {
+      "single": {
+        "caught": 6,
+        "total": 6
+      },
+      "relaysGeneric": {
+        "caught": 5,
+        "total": 6
+      },
+      "relaysTuned": {
+        "caught": 5,
+        "total": 6
+      }
+    }
+  },
+  "revertRate": {
+    "untyped": "67.2",
+    "typed": "13.0",
+    "calls": 400
+  }
+}

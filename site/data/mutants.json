@@ -1,0 +1,1141 @@
+{
+  "provenance": {
+    "codeCommit": "c5a7650c21173a50014746a8360e878ed80cf1f9",
+    "capturedAtCommit": "75fd23e447da9d6e608a3df75f5901f77c603310",
+    "fe": "fe 26.5.0 (3dab95f)",
+    "captured": "2026-11-09",
+    "sources": [
+      "mutants.decoded.txt",
+      "docs/mutation.md"
+    ],
+    "note": "Seeds, lengths and verdicts are from the decoded output of `fe test --show-logs -f mutant_`. Titles, descriptions and the reasons for misses are from docs/mutation.md."
+  },
+  "harnesses": {
+    "single": "one sender, generic generators",
+    "relaysTuned": "test account + 2 relays, harness-specific generators",
+    "relaysGeneric": "test account + 2 relays, generic generators (held-out mutants only)"
+  },
+  "invariants": {
+    "1": "sum of the known balances equals the total supply",
+    "2": "the zero address never holds tokens",
+    "3": "a call the contract rejects changes nothing",
+    "4": "supply changes only through an accepted mint, burn or burnFrom",
+    "5": "an accepted transfer / transferFrom moves exactly amount between the right accounts (nothing for a self-transfer)",
+    "6": "approve sets, increaseAllowance adds and decreaseAllowance subtracts the allowance exactly",
+    "7": "an accepted transferFrom / burnFrom reduces the allowance by exactly amount",
+    "8": "an accepted mint raises supply and the recipient's balance by exactly amount",
+    "9": "an accepted burn lowers supply and the burner's balance by exactly amount",
+    "10": "only the test account may mint"
+  },
+  "mutants": [
+    {
+      "id": 0,
+      "title": "control",
+      "description": "none (control)",
+      "kind": null,
+      "heldOut": false,
+      "control": true,
+      "reason": null,
+      "single": {
+        "verdict": "clean",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 432,
+        "atDeployment": false,
+        "steps": [],
+        "id": 0
+      },
+      "relaysTuned": {
+        "verdict": "clean",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 736,
+        "atDeployment": false,
+        "steps": [],
+        "id": 0
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 1,
+      "title": "transfer does not debit",
+      "description": "transfer never debits the sender",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 5,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 6,
+        "shrunkLen": 2,
+        "replays": 38,
+        "accepted": 5,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transferFrom(address,address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1081653400516622714672900043860770829562561203889",
+              "1"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 1
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 21,
+        "shrunkLen": 1,
+        "replays": 18,
+        "accepted": 10,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "transfer(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 1
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 2,
+      "title": "whole allowance not spent",
+      "description": "spending exactly the whole allowance leaves it unchanged (boundary)",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 7,
+        "seed": "84366531804016946634958908134155884459387259397610247915749790515942478154389",
+        "originalLen": 23,
+        "shrunkLen": 2,
+        "replays": 32,
+        "accepted": 379,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transferFrom(address,address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1081653400516622714672900043860770829562561203889",
+              "1"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 2
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 7,
+        "seed": "7552936417904453774556866273335296823450328416582226689144679015245048479923",
+        "originalLen": 13,
+        "shrunkLen": 2,
+        "replays": 35,
+        "accepted": 217,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "3",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transferFrom(address,address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1081653400516622714672900043860770829562561203889",
+              "3"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 2
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 3,
+      "title": "missing balance check",
+      "description": "missing balance check in transfer",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": "equivalent mutant. Fe's checked arithmetic reverts on from_balance - amount underflow, so removing the assert! changes nothing observable. 432 calls accepted, same as the control. No black-box test can tell the two apart.",
+      "single": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 432,
+        "atDeployment": false,
+        "steps": [],
+        "id": 3
+      },
+      "relaysTuned": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 736,
+        "atDeployment": false,
+        "steps": [],
+        "id": 3
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 4,
+      "title": "wrong event amount",
+      "description": "Transfer event reports amount + 1",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": "not observable. The harness reads contract state through view calls. Fissure has no way to inspect emitted logs inside a test.",
+      "single": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 432,
+        "atDeployment": false,
+        "steps": [],
+        "id": 4
+      },
+      "relaysTuned": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 736,
+        "atDeployment": false,
+        "steps": [],
+        "id": 4
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 5,
+      "title": "approve adds",
+      "description": "approve adds to the old allowance instead of replacing it",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 9,
+        "shrunkLen": 2,
+        "replays": 25,
+        "accepted": 8,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "decreaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 5
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 18,
+        "shrunkLen": 2,
+        "replays": 37,
+        "accepted": 6,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1397840815523076466699159265359708166239426845751",
+              "1",
+              "0"
+            ],
+            "sender": 1
+          },
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "1397840815523076466699159265359708166239426845751",
+              "0",
+              "0"
+            ],
+            "sender": 1
+          }
+        ],
+        "id": 5
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 6,
+      "title": "burn keeps supply",
+      "description": "burn does not reduce the total supply",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 9,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 1,
+        "shrunkLen": 1,
+        "replays": 6,
+        "accepted": 1,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "burn(uint256)",
+            "value": "0",
+            "words": [
+              "1",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 6
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 37,
+        "shrunkLen": 1,
+        "replays": 17,
+        "accepted": 16,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "burn(uint256)",
+            "value": "0",
+            "words": [
+              "1",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 6
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 7,
+      "title": "mint to zero address",
+      "description": "mint to the zero address allowed",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 2,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 26,
+        "shrunkLen": 1,
+        "replays": 15,
+        "accepted": 21,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "mint(address,uint256)",
+            "value": "0",
+            "words": [
+              "0",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 7
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 2,
+        "seed": "73992166026664682241923512942432173662368250918471097346800167227428777039905",
+        "originalLen": 42,
+        "shrunkLen": 1,
+        "replays": 18,
+        "accepted": 139,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "mint(address,uint256)",
+            "value": "0",
+            "words": [
+              "0",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 7
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 8,
+      "title": "self-transfer mints",
+      "description": "self-transfer credits on top of the old balance",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 5,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 6,
+        "shrunkLen": 2,
+        "replays": 38,
+        "accepted": 5,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transferFrom(address,address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1081653400516622714672900043860770829562561203889",
+              "1"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 8
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 21,
+        "shrunkLen": 1,
+        "replays": 18,
+        "accepted": 10,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "transfer(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 8
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 9,
+      "title": "wrong spender in transferFrom",
+      "description": "transferFrom checks the allowance of the wrong party",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": "needs a second sender. With one sender, from is either the sender itself (then the wrong and the right spender are the same account) or an account that never approved anything (rejected either way). Distinguishing them needs a caller other than the owner.",
+      "single": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 432,
+        "atDeployment": false,
+        "steps": [],
+        "id": 9
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 7,
+        "seed": "1117798184784405972715213085125991812820217033468733304185044088532116826467",
+        "originalLen": 55,
+        "shrunkLen": 2,
+        "replays": 62,
+        "accepted": 55,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transferFrom(address,address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1397840815523076466699159265359708166239426845751",
+              "1"
+            ],
+            "sender": 1
+          }
+        ],
+        "id": 9
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 10,
+      "title": "mint without access control",
+      "description": "mint without the minter-role check",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": "needs a second sender. The only sender is the owner, who holds the minter role. Multiple senders are the subject of the spike in [multi-sender-spike.md](multi-sender-spike.md) (not built).",
+      "single": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": 432,
+        "atDeployment": false,
+        "steps": [],
+        "id": 10
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 10,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 27,
+        "shrunkLen": 1,
+        "replays": 17,
+        "accepted": 13,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "mint(address,uint256)",
+            "value": "0",
+            "words": [
+              "1397840815523076466699159265359708166239426845751",
+              "0",
+              "0"
+            ],
+            "sender": 1
+          }
+        ],
+        "id": 10
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 11,
+      "title": "full-balance transfer short",
+      "description": "transferring the whole balance credits one token too few",
+      "kind": null,
+      "heldOut": false,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 5,
+        "seed": "1117798184784405972715213085125991812820217033468733304185044088532116826467",
+        "originalLen": 2,
+        "shrunkLen": 2,
+        "replays": 355,
+        "accepted": 40,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1461501637330902918203684832716283019655932542975",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transferFrom(address,address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1081653400516622714672900043860770829562561203889",
+              "1000"
+            ],
+            "sender": 0
+          }
+        ],
+        "id": 11
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 32,
+        "shrunkLen": 2,
+        "replays": 43,
+        "accepted": 14,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "mint(address,uint256)",
+            "value": "0",
+            "words": [
+              "1397840815523076466699159265359708166239426845751",
+              "2",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transfer(address,uint256)",
+            "value": "0",
+            "words": [
+              "1397840815523076466699159265359708166239426845751",
+              "2",
+              "0"
+            ],
+            "sender": 1
+          }
+        ],
+        "id": 11
+      },
+      "relaysGeneric": null
+    },
+    {
+      "id": 12,
+      "title": "large transfer skims 1 token",
+      "description": "a transfer of more than 500 tokens credits one token too few",
+      "kind": "hidden fee on a value threshold",
+      "heldOut": true,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 5,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 6,
+        "shrunkLen": 2,
+        "replays": 28,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "999",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "transferFrom(address,address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1081653400516622714672900043860770829562561203889",
+              "646"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "16796527209286157945379050431525746923851175736368196316864084982208762431887",
+        "originalLen": 35,
+        "shrunkLen": 1,
+        "replays": 21,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "transfer(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "786",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysGeneric": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "1117798184784405972715213085125991812820217033468733304185044088532116826467",
+        "originalLen": 48,
+        "shrunkLen": 1,
+        "replays": 25,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "transfer(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "557",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "title": "approve for actor 0x1002 dropped",
+      "description": "approve for the actor 0x1002 is silently not stored",
+      "kind": "one specific address mishandled",
+      "heldOut": true,
+      "control": false,
+      "reason": "The multi-sender harness's snapshot omits allowances granted to non-senders (the zero address and the actors) to save view calls. The bug is only visible through such an allowance, so it is invisible to that harness whatever the generators do. This is a harness choice made in step 8, not a generator problem, and the single-sender harness, which tracks every spender, catches it.",
+      "single": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "16796527209286157945379050431525746923851175736368196316864084982208762431887",
+        "originalLen": 2,
+        "shrunkLen": 1,
+        "replays": 16,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "4098",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysTuned": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": []
+      },
+      "relaysGeneric": {
+        "verdict": "missed",
+        "invariant": null,
+        "seed": null,
+        "originalLen": null,
+        "shrunkLen": null,
+        "replays": null,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": []
+      }
+    },
+    {
+      "id": 14,
+      "title": "decreaseAllowance off by one",
+      "description": "decreaseAllowance leaves one token too many",
+      "kind": "off-by-one in allowance arithmetic",
+      "heldOut": true,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 9,
+        "shrunkLen": 1,
+        "replays": 24,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "decreaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 59,
+        "shrunkLen": 1,
+        "replays": 13,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "decreaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysGeneric": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 9,
+        "shrunkLen": 1,
+        "replays": 14,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "decreaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "title": "mint forgets total supply",
+      "description": "mint does not raise the total supply",
+      "kind": "supply bookkeeping",
+      "heldOut": true,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 0,
+        "shrunkLen": 0,
+        "replays": 2,
+        "accepted": null,
+        "atDeployment": true,
+        "steps": []
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 0,
+        "shrunkLen": 0,
+        "replays": 2,
+        "accepted": null,
+        "atDeployment": true,
+        "steps": []
+      },
+      "relaysGeneric": {
+        "verdict": "caught",
+        "invariant": 1,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 0,
+        "shrunkLen": 0,
+        "replays": 2,
+        "accepted": null,
+        "atDeployment": true,
+        "steps": []
+      }
+    },
+    {
+      "id": 16,
+      "title": "burnFrom ignores the allowance",
+      "description": "burnFrom does not spend any allowance",
+      "kind": "missing authorisation",
+      "heldOut": true,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 7,
+        "seed": "1117798184784405972715213085125991812820217033468733304185044088532116826467",
+        "originalLen": 5,
+        "shrunkLen": 1,
+        "replays": 16,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "burnFrom(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 7,
+        "seed": "1117798184784405972715213085125991812820217033468733304185044088532116826467",
+        "originalLen": 12,
+        "shrunkLen": 1,
+        "replays": 18,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "burnFrom(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysGeneric": {
+        "verdict": "caught",
+        "invariant": 7,
+        "seed": "1117798184784405972715213085125991812820217033468733304185044088532116826467",
+        "originalLen": 16,
+        "shrunkLen": 1,
+        "replays": 20,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "burnFrom(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "title": "increaseAllowance overwrites",
+      "description": "increaseAllowance overwrites instead of adding",
+      "kind": "wrong arithmetic in a helper",
+      "heldOut": true,
+      "control": false,
+      "reason": null,
+      "single": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 23,
+        "shrunkLen": 2,
+        "replays": 28,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1081653400516622714672900043860770829562561203889",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysTuned": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 36,
+        "shrunkLen": 2,
+        "replays": 38,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "1397840815523076466699159265359708166239426845751",
+              "1",
+              "0"
+            ],
+            "sender": 0
+          },
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "1397840815523076466699159265359708166239426845751",
+              "0",
+              "0"
+            ],
+            "sender": 0
+          }
+        ]
+      },
+      "relaysGeneric": {
+        "verdict": "caught",
+        "invariant": 6,
+        "seed": "20893407965952772047992901519810815895700929490075850641830847030678997845439",
+        "originalLen": 53,
+        "shrunkLen": 2,
+        "replays": 38,
+        "accepted": null,
+        "atDeployment": false,
+        "steps": [
+          {
+            "call": "approve(address,uint256)",
+            "value": "0",
+            "words": [
+              "94902523022830171931908821597129605407879824147",
+              "1",
+              "0"
+            ],
+            "sender": 2
+          },
+          {
+            "call": "increaseAllowance(address,uint256)",
+            "value": "0",
+            "words": [
+              "94902523022830171931908821597129605407879824147",
+              "0",
+              "0"
+            ],
+            "sender": 2
+          }
+        ]
+      }
+    }
+  ]
+}

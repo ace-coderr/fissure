@@ -1,0 +1,241 @@
+
+heldout_mutant_14_relays_generic: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  9 calls shrunk to 1 in 14 replays
+    1. decreaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+heldout_mutant_12_single: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #5
+  6 calls shrunk to 2 in 28 replays
+    1. increaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 999, 0]
+    2. transferFrom(address,address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1081653400516622714672900043860770829562561203889, 646]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+heldout_mutant_15_relays_generic: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #1
+  0 calls shrunk to 0 in 2 replays
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+heldout_mutant_15_relays_tuned: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #1
+  0 calls shrunk to 0 in 2 replays
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+heldout_mutant_15_single: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #1
+  0 calls shrunk to 0 in 2 replays
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+heldout_mutant_14_single: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  9 calls shrunk to 1 in 24 replays
+    1. decreaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+heldout_mutant_13_single: FISSURE FOUND A FAILURE
+  seed 16796527209286157945379050431525746923851175736368196316864084982208762431887   broken invariant #6
+  2 calls shrunk to 1 in 16 replays
+    1. approve(address,uint256)   words=[4098, 1, 0]
+  reproduce: fuzz with Config { seed: 16796527209286157945379050431525746923851175736368196316864084982208762431887, .. } or replay the calls above
+
+heldout_mutant_16_single: FISSURE FOUND A FAILURE
+  seed 1117798184784405972715213085125991812820217033468733304185044088532116826467   broken invariant #7
+  5 calls shrunk to 1 in 16 replays
+    1. burnFrom(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+  reproduce: fuzz with Config { seed: 1117798184784405972715213085125991812820217033468733304185044088532116826467, .. } or replay the calls above
+
+heldout_mutant_14_relays_tuned: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  59 calls shrunk to 1 in 13 replays
+    1. decreaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+heldout_mutant_16_relays_generic: FISSURE FOUND A FAILURE
+  seed 1117798184784405972715213085125991812820217033468733304185044088532116826467   broken invariant #7
+  16 calls shrunk to 1 in 20 replays
+    1. burnFrom(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+  reproduce: fuzz with Config { seed: 1117798184784405972715213085125991812820217033468733304185044088532116826467, .. } or replay the calls above
+
+heldout_mutant_16_relays_tuned: FISSURE FOUND A FAILURE
+  seed 1117798184784405972715213085125991812820217033468733304185044088532116826467   broken invariant #7
+  12 calls shrunk to 1 in 18 replays
+    1. burnFrom(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+  reproduce: fuzz with Config { seed: 1117798184784405972715213085125991812820217033468733304185044088532116826467, .. } or replay the calls above
+
+heldout_mutant_12_relays_generic: FISSURE FOUND A FAILURE
+  seed 1117798184784405972715213085125991812820217033468733304185044088532116826467   broken invariant #1
+  48 calls shrunk to 1 in 25 replays
+    1. transfer(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 557, 0]
+  reproduce: fuzz with Config { seed: 1117798184784405972715213085125991812820217033468733304185044088532116826467, .. } or replay the calls above
+
+heldout_mutant_12_relays_tuned: FISSURE FOUND A FAILURE
+  seed 16796527209286157945379050431525746923851175736368196316864084982208762431887   broken invariant #1
+  35 calls shrunk to 1 in 21 replays
+    1. transfer(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 786, 0]
+  reproduce: fuzz with Config { seed: 16796527209286157945379050431525746923851175736368196316864084982208762431887, .. } or replay the calls above
+
+heldout_mutant_17_single: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  23 calls shrunk to 2 in 28 replays
+    1. approve(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+    2. increaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+multi_mutant_10_mint_without_access_control: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #10
+  27 calls shrunk to 1 in 17 replays
+    1. mint(address,uint256)   words=[1397840815523076466699159265359708166239426845751, 0, 0]   [sender: relay 1]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above (multi-sender: use a Cast of at least 1 relays)
+
+multi_mutant_1_transfer_does_not_debit: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #1
+  21 calls shrunk to 1 in 18 replays
+    1. transfer(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+multi_mutant_11_full_balance_transfer_short: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #1
+  32 calls shrunk to 2 in 43 replays
+    1. mint(address,uint256)   words=[1397840815523076466699159265359708166239426845751, 2, 0]
+    2. transfer(address,uint256)   words=[1397840815523076466699159265359708166239426845751, 2, 0]   [sender: relay 1]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above (multi-sender: use a Cast of at least 1 relays)
+
+heldout_mutant_17_relays_generic: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  53 calls shrunk to 2 in 38 replays
+    1. approve(address,uint256)   words=[94902523022830171931908821597129605407879824147, 1, 0]   [sender: relay 2]
+    2. increaseAllowance(address,uint256)   words=[94902523022830171931908821597129605407879824147, 0, 0]   [sender: relay 2]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above (multi-sender: use a Cast of at least 2 relays)
+
+heldout_mutant_17_relays_tuned: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  36 calls shrunk to 2 in 38 replays
+    1. approve(address,uint256)   words=[1397840815523076466699159265359708166239426845751, 1, 0]
+    2. increaseAllowance(address,uint256)   words=[1397840815523076466699159265359708166239426845751, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+multi_mutant_6_burn_keeps_supply: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #1
+  37 calls shrunk to 1 in 17 replays
+    1. burn(uint256)   words=[1, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+multi_mutant_5_approve_adds: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  18 calls shrunk to 2 in 37 replays
+    1. increaseAllowance(address,uint256)   words=[1397840815523076466699159265359708166239426845751, 1, 0]   [sender: relay 1]
+    2. approve(address,uint256)   words=[1397840815523076466699159265359708166239426845751, 0, 0]   [sender: relay 1]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above (multi-sender: use a Cast of at least 1 relays)
+
+multi_mutant_8_self_transfer_mints: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #1
+  21 calls shrunk to 1 in 18 replays
+    1. transfer(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+multi_mutant_2_whole_allowance_not_spent: FISSURE FOUND A FAILURE
+  seed 7552936417904453774556866273335296823450328416582226689144679015245048479923   broken invariant #7
+  13 calls shrunk to 2 in 35 replays
+    1. approve(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 3, 0]
+    2. transferFrom(address,address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1081653400516622714672900043860770829562561203889, 3]
+  reproduce: fuzz with Config { seed: 7552936417904453774556866273335296823450328416582226689144679015245048479923, .. } or replay the calls above
+
+multi_mutant_7_mint_to_zero_address: FISSURE FOUND A FAILURE
+  seed 73992166026664682241923512942432173662368250918471097346800167227428777039905   broken invariant #2
+  42 calls shrunk to 1 in 18 replays
+    1. mint(address,uint256)   words=[0, 1, 0]
+  reproduce: fuzz with Config { seed: 73992166026664682241923512942432173662368250918471097346800167227428777039905, .. } or replay the calls above
+
+multi_mutant_9_wrong_spender: FISSURE FOUND A FAILURE
+  seed 1117798184784405972715213085125991812820217033468733304185044088532116826467   broken invariant #7
+  55 calls shrunk to 2 in 62 replays
+    1. increaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+    2. transferFrom(address,address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1397840815523076466699159265359708166239426845751, 1]   [sender: relay 1]
+  reproduce: fuzz with Config { seed: 1117798184784405972715213085125991812820217033468733304185044088532116826467, .. } or replay the calls above (multi-sender: use a Cast of at least 1 relays)
+
+mutant_1_transfer_does_not_debit: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #5
+  6 calls shrunk to 2 in 38 replays
+    1. increaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+    2. transferFrom(address,address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1081653400516622714672900043860770829562561203889, 1]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+mutant_5_approve_adds: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #6
+  9 calls shrunk to 2 in 25 replays
+    1. increaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+    2. decreaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+mutant_6_burn_keeps_supply: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #9
+  1 calls shrunk to 1 in 6 replays
+    1. burn(uint256)   words=[1, 0, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+mutant_7_mint_to_zero_address: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #2
+  26 calls shrunk to 1 in 15 replays
+    1. mint(address,uint256)   words=[0, 1, 0]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+mutant_8_self_transfer_mints: FISSURE FOUND A FAILURE
+  seed 20893407965952772047992901519810815895700929490075850641830847030678997845439   broken invariant #5
+  6 calls shrunk to 2 in 38 replays
+    1. increaseAllowance(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+    2. transferFrom(address,address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1081653400516622714672900043860770829562561203889, 1]
+  reproduce: fuzz with Config { seed: 20893407965952772047992901519810815895700929490075850641830847030678997845439, .. } or replay the calls above
+
+mutant_11_full_balance_transfer_short: FISSURE FOUND A FAILURE
+  seed 1117798184784405972715213085125991812820217033468733304185044088532116826467   broken invariant #5
+  2 calls shrunk to 2 in 355 replays
+    1. approve(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1461501637330902918203684832716283019655932542975, 0]
+    2. transferFrom(address,address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1081653400516622714672900043860770829562561203889, 1000]
+  reproduce: fuzz with Config { seed: 1117798184784405972715213085125991812820217033468733304185044088532116826467, .. } or replay the calls above
+
+mutant_2_whole_allowance_not_spent: FISSURE FOUND A FAILURE
+  seed 84366531804016946634958908134155884459387259397610247915749790515942478154389   broken invariant #7
+  23 calls shrunk to 2 in 32 replays
+    1. approve(address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1, 0]
+    2. transferFrom(address,address,uint256)   words=[1081653400516622714672900043860770829562561203889, 1081653400516622714672900043860770829562561203889, 1]
+  reproduce: fuzz with Config { seed: 84366531804016946634958908134155884459387259397610247915749790515942478154389, .. } or replay the calls above
+
+MUTATION RESULTS (single sender)
+  mutant  verdict  invariant  calls->shrunk  replays  accepted calls
+       0  clean            -  -                    -  432
+       1  CAUGHT           5  6->2                38  5
+       2  CAUGHT           7  23->2               32  379
+       3  missed           -  -                    -  432
+       4  missed           -  -                    -  432
+       5  CAUGHT           6  9->2                25  8
+       6  CAUGHT           9  1->1                 6  1
+       7  CAUGHT           2  26->1               15  21
+       8  CAUGHT           5  6->2                38  5
+       9  missed           -  -                    -  432
+      10  missed           -  -                    -  432
+      11  CAUGHT           5  2->2               355  40
+
+MUTATION RESULTS (test account + 2 relay senders)
+  mutant  verdict  invariant  calls->shrunk  replays  accepted calls
+       0  clean            -  -                    -  736
+       1  CAUGHT           1  21->1               18  10
+       2  CAUGHT           7  13->2               35  217
+       3  missed           -  -                    -  736
+       4  missed           -  -                    -  736
+       5  CAUGHT           6  18->2               37  6
+       6  CAUGHT           1  37->1               17  16
+       7  CAUGHT           2  42->1               18  139
+       8  CAUGHT           1  21->1               18  10
+       9  CAUGHT           7  55->2               62  55
+      10  CAUGHT          10  27->1               17  13
+      11  CAUGHT           1  32->2               43  14
+
+HELD-OUT MUTANTS (written after the generators were frozen)
+  mutant  one sender, generic generators      2 relays, generic generators        2 relays, tuned generators        
+      12  CAUGHT #5 6->2                      CAUGHT #1 48->1                     CAUGHT #1 35->1                   
+      13  CAUGHT #6 2->1                      missed                              missed                            
+      14  CAUGHT #6 9->1                      CAUGHT #6 9->1                      CAUGHT #6 59->1                   
+      15  CAUGHT #1 0->0                      CAUGHT #1 0->0                      CAUGHT #1 0->0                    
+      16  CAUGHT #7 5->1                      CAUGHT #7 16->1                     CAUGHT #7 12->1                   
+      17  CAUGHT #6 23->2                     CAUGHT #6 53->2                     CAUGHT #6 36->2                   

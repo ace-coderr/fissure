@@ -1,0 +1,40 @@
+{
+  "provenance": {
+    "codeCommit": "c5a7650c21173a50014746a8360e878ed80cf1f9",
+    "capturedAtCommit": "75fd23e447da9d6e608a3df75f5901f77c603310",
+    "fe": "fe 26.5.0 (3dab95f)",
+    "captured": "2026-11-09",
+    "sources": [
+      "demo.decoded.txt",
+      "mutants.decoded.txt",
+      "docs/mutation.md"
+    ]
+  },
+  "items": [
+    "seed 0x8d5e810ffd8430ed…1e558ecba4cbf3c2",
+    "4 calls shrunk to 2 in 19 replays",
+    "broken invariant #1",
+    "deposit() value=1 wei",
+    "deposit() value=1 wei",
+    "invariant 1: sum of the known balances equals the total supply",
+    "invariant 2: the zero address never holds tokens",
+    "invariant 3: a call the contract rejects changes nothing",
+    "invariant 4: supply changes only through an accepted mint, burn or burnFrom",
+    "invariant 5: an accepted transfer / transferFrom moves exactly amount between the right accounts (nothing for a self-transfer)",
+    "invariant 6: approve sets, increaseAllowance adds and decreaseAllowance subtracts the allowance exactly",
+    "invariant 7: an accepted transferFrom / burnFrom reduces the allowance by exactly amount",
+    "invariant 8: an accepted mint raises supply and the recipient's balance by exactly amount",
+    "invariant 9: an accepted burn lowers supply and the burner's balance by exactly amount",
+    "mutant 1: transfer does not debit",
+    "mutant 2: whole allowance not spent",
+    "mutant 5: approve adds",
+    "mutant 6: burn keeps supply",
+    "mutant 7: mint to zero address",
+    "mutant 8: self-transfer mints",
+    "mutant 9: wrong spender in transferFrom",
+    "mutant 10: mint without access control",
+    "revert rate 67.2% → 13.0%",
+    "114 tests, 0 failed",
+    "fe 26.5.0 (3dab95f)"
+  ]
+}
