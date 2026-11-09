@@ -106,8 +106,9 @@ contract's own guards (`docs/revert-rate.md`). On a real ERC-20 (the Fe Guide's
 CoolCoin, third-party) Fissure found nothing in the unmodified contract (after
 I fixed two mistakes in my own invariants), and with 11 seeded bugs it caught 7
 with one sender and 9 with several senders (relay contracts); the 2 it misses are
-one equivalent mutant and one wrong event (`docs/mutation.md`). Small evidence,
-honestly reported.
+one equivalent mutant and one wrong event. On 6 further mutants written after the
+generators were frozen it caught 6 with one sender and 5 with relays
+(`docs/mutation.md`). Small evidence; see the honesty section below.
 
 ## Documentation and demo
 
@@ -232,6 +233,33 @@ Install: `curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/f
 There is no Windows build of Fe 26.5.0; development was on Windows through WSL
 (Ubuntu), CI runs on `ubuntu-latest`. Only Fe and (for the demo script) Node are
 needed; the library has no dependencies.
+
+## Honesty: what the evidence does and does not show
+
+- **The mutation results are small and author-made.** The target is a 300-line
+  teaching ERC-20 from the Fe Guide (third-party, unaudited by its own words).
+  The 11 mutants of step 7 and the 6 of step 9 were written by the same person who
+  wrote the invariants, so they are of kinds the invariants were built around.
+- **The generators were tuned after I saw misses.** With relay senders and the
+  generic generators, two mutants (2 and 9) were not found, because they need a
+  spend to match an earlier approval's amount between different senders. I then
+  wrote harness-specific generators (`Party`, `Tok`) and raised the runs from 12
+  to 25, and both were caught. The mutants were not chosen afterwards, but the
+  generators were, so the 9-of-11 figure is partly fitted.
+- **Held-out check.** I then froze the generators and harnesses (commit
+  `1af440e`, file hashes in `docs/mutation.md`), wrote six new mutants of other
+  kinds, committed my predictions before the first run, and ran them with the
+  generic generators and with the tuned ones, without retuning. Results: with one
+  sender 6 of 6 caught; with two relays, 5 of 6 under either generator set. The
+  one miss (mutant 13) comes from a harness choice (allowances to non-senders are
+  not tracked), not from the generators. One of my 18 predictions was wrong. The
+  tuned generators made no difference on these six. One of the six (mutant 15) is
+  caught at deployment, before any call, and cannot be shrunk.
+- **What this supports, and no more:** the harness, the shrinker and the relay
+  machinery work as designed on a contract of this size. It does not show that
+  Fissure finds bugs in contracts it has not been shaped around.
+- **Nobody else has reviewed any of it.** The audits (`docs/audit.md`) were done
+  by the author with AI assistance.
 
 ## Limitations
 
