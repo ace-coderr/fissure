@@ -14,10 +14,10 @@ Fe Builders Challenge, submission deadline November 24, 2026, 23:59 UTC.
 
 The full SHA is entered in the submission form and is the head of `main` at
 submission time. All library, test, contract and script code was last changed in
-commit `c5a7650c21173a50014746a8360e878ed80cf1f9`; later commits change only
+commit `468389e66e03e43030eab0f18e5cc9074a5f27c8`; later commits change only
 documentation and the project site (`site/`, a separate Vite + React + TypeScript app
 that contains no Fe code). Verify with
-`git diff c5a7650 HEAD --stat -- src scripts .github package.json fe.toml`, which
+`git diff 468389e HEAD --stat -- src scripts .github package.json fe.toml`, which
 prints nothing.
 
 ## Reproduction
