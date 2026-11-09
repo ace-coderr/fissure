@@ -1,0 +1,33 @@
+/* Design tokens. One easing curve and four durations for every motion on the site. */
+:root {
+  /* paper and ink */
+  --paper: #ebe3d1;
+  --paper-deep: #ded4bd;
+  --paper-line: #b9ae96;
+  --ink: #15161a;
+  --ink-soft: #46464b;
+
+  /* Fe is iron: rust */
+  --rust: #b3380a; /* text and rules on paper (AA on --paper) */
+  --rust-bright: #ff6a2b; /* fills and text on graphite */
+
+  /* graphite panels */
+  --graphite: #17181a;
+  --graphite-2: #232428;
+  --graphite-line: #3a3b40;
+  --on-dark: #ece6d6;
+  --on-dark-soft: #a8a495;
+
+  --font-head: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --ease: cubic-bezier(0.22, 0.8, 0.12, 1);
+  --d-fast: 160ms;
+  --d-base: 320ms;
+  --d-slow: 640ms;
+  --d-slower: 1100ms;
+
+  --gutter: clamp(16px, 4vw, 40px);
+  --maxw: 1240px;
+  --nav-h: 56px;
+}

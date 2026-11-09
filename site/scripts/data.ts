@@ -222,8 +222,11 @@ const mutantsJson = {
 
 // ---------- stats ----------
 const revert = parseRevertRate(repoFile("docs/revert-rate.md"));
+const pitch = /\*\*Pitch:\*\* ([^\n]+)/.exec(repoFile("README.md"))?.[1];
+if (!pitch) throw new Error("could not read the pitch from README.md");
 const statsJson = {
-  provenance: provenance(["tests.txt", "demo.decoded.txt", "mutants.decoded.txt", "docs/revert-rate.md"]),
+  provenance: provenance(["tests.txt", "demo.decoded.txt", "mutants.decoded.txt", "docs/revert-rate.md", "README.md"]),
+  pitch,
   tests: testsPassed,
   demo: { originalLen: demo.originalLen, shrunkLen: demo.shrunkLen, replays: demo.replays },
   mutants: {

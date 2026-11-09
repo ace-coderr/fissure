@@ -8,9 +8,11 @@
       "tests.txt",
       "demo.decoded.txt",
       "mutants.decoded.txt",
-      "docs/revert-rate.md"
+      "docs/revert-rate.md",
+      "README.md"
     ]
   },
+  "pitch": "Fissure is a stateful invariant-testing toolkit written in Fe: it turns a contract's `msg` types into random call sequences inside `fe test`, checks your invariants after every call, and shrinks any failure to a minimal sequence you can replay.",
   "tests": 114,
   "demo": {
     "originalLen": 4,
