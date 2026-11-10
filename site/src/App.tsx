@@ -7,7 +7,7 @@ import Replay from "./views/Replay";
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
       <a className="skip" href="#main">
         Skip to content
       </a>
