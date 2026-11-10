@@ -101,6 +101,8 @@ under 680 px.
 
 ## Live check (Netlify, the earlier host)
 
+*History: the Netlify site was deleted on 2026-11-10; the live site is now on GitHub Pages (see the last section).*
+
 Site `fissure-fe` in the `ace-won` team, https://fissure-fe.netlify.app. Base directory
 `site`, build `npm run build`, publish `dist`, GitHub `ace-coderr/fissure` branch `main`.
 
