@@ -38,7 +38,7 @@ interface Stage {
 const HEAD = "demo_vault_bug_is_found_and_shrunk: FISSURE FOUND A FAILURE";
 const SEED_LINE = `  seed ${shortDecimal(demo.seed)}   broken invariant #${demo.invariant.id}`;
 const RESULT = `  ${demo.originalLen} calls shrunk to ${demo.shrunkLen} in ${demo.replays} replays`;
-const REPRO = `  reproduce: fuzz with Config { seed: ${shortDecimal(demo.seed)}, .. } or replay the calls above`;
+const REPRO = `  reproduce: fuzz with Config { seed: ${shortDecimal(demo.seed)}, .. }\n  or replay the calls above`;
 
 const originalText = (i: number, valueOverride?: string): string => {
   const s = demo.original[i];

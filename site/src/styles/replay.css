@@ -78,7 +78,8 @@
 .replay-body {
   position: relative;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word; /* wrap at spaces; break a word only when it cannot fit at all */
+  overflow-x: hidden; /* never a horizontal scrollbar that could hide the end of a line */
   min-height: 330px;
   line-height: 1.75;
 }
