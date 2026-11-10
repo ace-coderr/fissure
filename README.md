@@ -2,7 +2,7 @@
 
 **Pitch:** Fissure is a stateful invariant-testing toolkit written in Fe: it turns a contract's `msg` types into random call sequences inside `fe test`, checks your invariants after every call, and shrinks any failure to a minimal sequence you can replay.
 
-**Site:** https://fissure-fe.netlify.app (the real failing run shrunk on screen, and every mutant, caught or missed; generated from this repository's own test output, see `docs/site-audit.md`).
+**Site:** https://ace-coderr.github.io/fissure/ (earlier host: fissure-fe.netlify.app) (the real failing run shrunk on screen, and every mutant, caught or missed; generated from this repository's own test output, see `docs/site-audit.md`).
 
 ## The problem
 

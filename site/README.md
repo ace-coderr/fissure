@@ -34,4 +34,4 @@ numbers, the Fe version, the capture date and its sources.
 Fonts (Archivo, JetBrains Mono; SIL OFL 1.1) are bundled from the `@fontsource`
 packages and served from the site itself.
 
-Deployed on Netlify (site `fissure-fe`), automatically on every push to `main`: base directory `site`, build `npm run build`, publish `dist`.
+Deployed on GitHub Pages (https://ace-coderr.github.io/fissure/) by `.github/workflows/pages.yml` on every push to `main`: `npm ci`, `npm run build` with `VITE_BASE=/fissure/`, publish `site/dist`. The build also writes `404.html` (a copy of `index.html`) so direct visits and refreshes of `/replay` and `/mutants` load the app; Pages serves it with HTTP status 404, which the browser ignores. `fissure-fe.netlify.app` was the earlier host (root build, `netlify.toml`); Netlify stopped building when the account's credits ran out.

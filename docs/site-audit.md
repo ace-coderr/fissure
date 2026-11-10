@@ -99,7 +99,7 @@ under 680 px.
   serving on port 4173; those numbers were discarded and everything above was measured
   on this site's own build.
 
-## Live check (Netlify)
+## Live check (Netlify, the earlier host)
 
 Site `fissure-fe` in the `ace-won` team, https://fissure-fe.netlify.app. Base directory
 `site`, build `npm run build`, publish `dist`, GitHub `ace-coderr/fissure` branch `main`.
@@ -120,3 +120,20 @@ Site `fissure-fe` in the `ace-won` team, https://fissure-fe.netlify.app. Base di
 - **Not checked live:** the animation timing on the live host, other browsers, and any
   device other than this desktop; see "Not verified" above.
 
+## Live check (GitHub Pages)
+
+https://ace-coderr.github.io/fissure/, built by `.github/workflows/pages.yml` from commit
+`93cec0b` (first Pages deploy). Netlify stopped building new commits ("Account credit usage
+exceeded", including a manual CLI deploy), so its copy predates the Replay last-line fix.
+
+- **Base path.** The Pages build sets `VITE_BASE=/fissure/`; the router's basename follows it. The
+  default build (Netlify) is still the root build. `/replay` and `/mutants` load directly and on
+  refresh through `404.html` (a copy of the app). Pages answers those with HTTP 404 and the app
+  renders the route anyway; each such load logs one console "404" for the document itself.
+- **Checked in a browser on the live URL** at 1920, 1440, 1024 and 390 px: no horizontal scroll
+  on any page; the Replay last line reads "... or replay the calls above" in full at every width;
+  the result reads "4 calls shrunk to 2 in 19 replays"; the Overview shows 119 tests and 19
+  replays; the Mutants page shows 7/11, 9/11, 6/6 and 5/6 and its "Missed somewhere" filter
+  narrows 18 rows to 5; favicon, fonts and scripts load from `/fissure/` with no failed requests
+  and no third-party requests; every internal link carries `/fissure`.
+- **Not checked:** other browsers; any real phone.
